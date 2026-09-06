@@ -1,18 +1,20 @@
 import type { AnyFunction, Constructor } from '@core/types/primitives.js';
-import { _isFunction } from '@nestify-js/shared';
+import { _isFunction, promiseTry } from '@nestify-js/shared';
 
-import type { FilterTask, GuardTask, InterceptorTask, PipeTask } from '@core/types/middleware.js';
+import {
+  InterceptorNextHandler,
+  type FilterTask,
+  type GuardTask,
+  type InterceptorTask,
+  type PipeTask,
+} from '@core/types/middleware.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { TaskifyAsync } from 'serial-task';
 
 import { expectArray } from '@core/asserts/index.js';
 import { ExecutionContext } from '@core/common/execution-context.js';
+import { runReverseInterceptors } from './middlewares/interceptor.js';
 
-async function run(fns: AnyFunction[], ...args: any[]) {
-  for (let i = 0; i < fns.length; i++) {
-    await fns[i](...args);
-  }
-}
 interface MiddlewareGroup {
   guard: TaskifyAsync<GuardTask>;
   interceptor: TaskifyAsync<InterceptorTask>;
@@ -25,38 +27,32 @@ export function createHandler(controller: Constructor, method: AnyFunction, midd
   return async function (request: FastifyRequest, reply: FastifyReply) {
     const context = new ExecutionContext([request, reply], 'http', controller, method);
 
-    // Interceptor enter
-    const interceptResult = await interceptor(context);
-
     try {
-      // Guard
+      // Guards
       await guard(context);
 
-      // Pipe
-      const piped = await pipe(context);
+      // Interceptors
+      const interceptResult = await interceptor(context, new InterceptorNextHandler());
+
+      // Pipes
+      const piped = await pipe(context, [], {});
       if (piped.trivial) {
         piped.value = [request, reply];
       } else {
         expectArray(piped.value, `Pipe must return an array, but got: ${String(piped)}`);
       }
 
-      // Handler
-      const result = await method(...piped.value);
-
-      // todo pipe也要第二次运行，用来返回值校验
+      // Controller method
+      let result = await method(...piped.value);
 
       // Interceptor leave
-      const leaves = interceptResult.results.filter(_isFunction).reverse() as AnyFunction[];
-      await run(leaves, result);
+      const interceptorNextHandlers = interceptResult.results as InterceptorNextHandler[];
+      result = await runReverseInterceptors(interceptorNextHandlers, result);
 
       return result;
-    } catch (error) {
-      // Interceptor leave (cleanup on error)
-      const leaves = interceptResult.results.filter(_isFunction).reverse() as AnyFunction[];
-      await run(leaves, error);
-
+    } catch (e) {
       // Filter
-      await filter(context, error);
+      await filter(context, e);
     }
   };
 }

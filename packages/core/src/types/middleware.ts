@@ -3,6 +3,7 @@ import type { FastifySchema } from 'fastify';
 import { type Constructor, type SSKey, type OrPromise } from '@nestify-js/shared';
 import type { ExecutionContext } from '@core/common/execution-context.js';
 import type { InjectToken } from './injection.js';
+import { _iden, _idenErr } from '@core/test.js';
 
 /**
  * Get middlewares for a class method
@@ -61,6 +62,30 @@ export class NestifyGuard {
   canActivate(_context: ExecutionContext): OrPromise | OrPromise<boolean> {}
 }
 
+export class InterceptorNextHandler {
+  /**
+   * Used to map returned value of a controller.
+   * @internal
+   */
+  onNext: (value: any) => any = _iden;
+
+  /**
+   * Used to catch errors.
+   * @internal
+   */
+  onError: (error: any) => any = _idenErr;
+
+  then(fn: (value: any) => any): this {
+    this.onNext = fn;
+    return this;
+  }
+
+  catch(fn: (error: any) => any): this {
+    this.onError = fn;
+    return this;
+  }
+}
+
 /**
  * You must override the `intercept` method in your custom interceptor class.
  */
@@ -70,8 +95,10 @@ export class NestifyInterceptor {
    * @param context like in NestJS, it can `.switchToHttp()` and get `request` and `reply` object
    * @returns returned function will be called when leaving the controller method
    */
-  intercept(context: ExecutionContext): OrPromise | OrPromise<(resultOrError: any | Error) => any>;
-  intercept(_context: ExecutionContext) {}
+  intercept(context: ExecutionContext, next: InterceptorNextHandler): OrPromise<InterceptorNextHandler>;
+  intercept(_context: ExecutionContext, next: InterceptorNextHandler) {
+    return next;
+  }
 }
 
 /**

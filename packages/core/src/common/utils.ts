@@ -4,6 +4,12 @@ import { likeModule } from '@core/asserts/index.js';
 
 const PATH_REGEX = /^\/?(:[a-zA-Z0-9_-]+|[a-zA-Z0-9_-]+)(\/(:[a-zA-Z0-9_-]+|[a-zA-Z0-9_-]+))*$/;
 
+export const _iden = (v: any) => v;
+
+export const _idenErr = (e: any) => {
+  throw e;
+};
+
 /**
  * Check if the given path is valid and split it into segments.
  * - The path must start with a slash and can only contain alphanumeric characters, slashes,
