@@ -6,8 +6,20 @@ export { Controller } from './decorators/router/controller.js';
 
 export { Inject } from './decorators/inject.js';
 export { Injectable } from './decorators/injectable.js';
-export { createCustomDecorator, getCustomClassMetadata, getCustomMethodMetadata } from './decorators/custom.js';
 export { Module, toModule } from './decorators/module.js';
+export { createDecorator, getClassMetadata, getMethodMetadata } from './decorators/custom.js';
+
+import { sym } from '@nestify-js/shared';
+
+/**
+ * ## Use it with caution!
+ *
+ * Symbol for storing metadata on classes and methods.
+ *
+ * It's actually `Symbol.metadata` when setting `target:"ESNext"` in tsconfig.json.
+ * @see https://github.com/tc39/proposal-decorator-metadata
+ */
+export const SymbolMetadata = sym.metadata;
 
 // middlewares
 export { Guard } from './decorators/middlewares/guard.js';

@@ -7,4 +7,7 @@ export type Constructor<T = any> = new (...args: any[]) => T;
 
 export type AnyFunction = (...args: any[]) => any;
 
+/**
+ * string or symbol
+ */
 export type SSKey = string | symbol;

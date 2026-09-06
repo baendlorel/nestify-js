@@ -1,4 +1,4 @@
-import { createCustomDecorator } from '../../../packages/core/src/decorators/custom.js';
+import { createDecorator } from '../../../packages/core/src/decorators/custom.js';
 
 // Custom decorator for role-based access control
-export const Roles = createCustomDecorator<string[]>('roles');
+export const Roles = createDecorator<string[]>('roles');

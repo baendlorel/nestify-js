@@ -2,7 +2,6 @@ import type { AnyFunction, Constructor, SSKey } from '@core/types/primitives.js'
 import { sym } from '@nestify-js/shared';
 import { expectDecoratorContext } from '@core/asserts/index.js';
 import { metaGet, metaSet } from '@core/register/meta.js';
-import { ExecutionContext } from '@core/common/execution-context.js';
 
 /**
  * Creates a custom decorator factory that stores metadata in the [sym.root, sym.custom] path
@@ -10,37 +9,10 @@ import { ExecutionContext } from '@core/common/execution-context.js';
  *
  * @param key - The key to store the metadata under
  * @returns A decorator factory function that accepts metadata and returns a decorator
- *
- * @example
- * ```typescript
- * // Create a custom decorator
- * const Roles = createCustomDecorator<string[]>('roles');
- *
- * // Use it to decorate classes, methods, or fields
- * @Controller()
- * @Roles(['admin', 'user'])
- * class UserController {
- *   @Get('/sensitive')
- *   @Roles(['admin'])
- *   getSensitiveData() {
- *     return { data: 'sensitive' };
- *   }
- * }
- *
- * // Access in a guard
- * @Guard()
- * class RoleGuard implements NestifyGuard {
- *   canActivate(context: ExecutionContext): boolean {
- *     const requiredRoles = getCustomMetadata<string[]>('roles', context);
- *     // Check if user has required roles
- *     return checkUserRoles(requiredRoles);
- *   }
- * }
- * ```
  */
-export function createCustomDecorator<T = unknown>(key: SSKey) {
+export function createDecorator<T = unknown>(key: SSKey) {
   return function (metadata: T) {
-    return function (target: Constructor | AnyFunction, context: DecoratorContext) {
+    return function (_target: Constructor | AnyFunction, context: DecoratorContext) {
       expectDecoratorContext(context, `__func__ Invalid decorator context, got ${typeof context}`);
 
       if (context.kind === 'class') {
@@ -57,49 +29,26 @@ export function createCustomDecorator<T = unknown>(key: SSKey) {
 }
 
 /**
- * Retrieves custom metadata
- *
- * @example
- * ```typescript
- * // In a guard, interceptor, pipe, or filter
- * @Guard()
- * class MyGuard implements NestifyGuard {
- *   canActivate(context: ExecutionContext): boolean {
- *     // Get metadata from the controller class
- *     const controllerRoles = getCustomClassMetadata<string[]>(context, 'roles');
- *
- *     // Get metadata from the handler method via execution context
- *     const handlerRoles = getCustomMethodMetadata<string[]>(context, 'roles');
- *
- *     return checkPermissions(controllerRoles, handlerRoles);
- *   }
- * }
- * ```
+ * Retrieves class metadata
  */
-export function getCustomClassMetadata<T = unknown>(context: ExecutionContext, key: SSKey): T | undefined {
-  return metaGet<T>(context.getClass(), [sym.custom.root, key]);
+export function getClassMetadata<T = unknown>(cls: Constructor, key: SSKey): T | undefined {
+  return metaGet<T>(cls, [sym.custom.root, key]);
+}
+
+/**8-
+ * Retrieves class method metadata
+ */
+export function getMethodMetadata<T = unknown>(
+  cls: Constructor,
+  methodName: string | symbol,
+  key: SSKey,
+): T | undefined {
+  return metaGet<T>(cls, [sym.custom.root, sym.custom.method, methodName, key]);
 }
 
 /**
- * Retrieves custom metadata
- *
- * @example
- * ```typescript
- * // In a guard, interceptor, pipe, or filter
- * @Guard()
- * class MyGuard implements NestifyGuard {
- *   canActivate(context: ExecutionContext): boolean {
- *     // Get metadata from the controller class
- *     const controllerRoles = getCustomClassMetadata<string[]>(context, 'roles');
- *
- *     // Get metadata from the handler method via execution context
- *     const handlerRoles = getCustomMethodMetadata<string[]>(context, 'roles');
- *
- *     return checkPermissions(controllerRoles, handlerRoles);
- *   }
- * }
- * ```
+ * Set custom metadata for a class method.
  */
-export function getCustomMethodMetadata<T = unknown>(context: ExecutionContext, key: SSKey): T | undefined {
-  return metaGet<T>(context.getClass(), [sym.custom.root, sym.custom.method, context.getHandler().name, key]);
+export function setMethodMetadata<T = unknown>(context: ClassMethodDecoratorContext, key: SSKey, metadata: T) {
+  metaSet<T>(context, [sym.custom.root, sym.custom.method, context.name, key], metadata);
 }
