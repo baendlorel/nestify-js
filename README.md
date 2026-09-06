@@ -167,6 +167,46 @@ Defines a module with providers, controllers, imports, and exports:
 class UserModule {}
 ```
 
+### Custom Decorators and Metadata
+
+`createDecorator(key)` creates a Stage 3 class/method decorator that stores custom metadata. Metadata getters now receive the controller class directly instead of an `ExecutionContext`:
+
+```typescript
+const Roles = createDecorator<string[]>('roles');
+
+@Roles(['admin'])
+@Controller('/admin')
+class AdminController {
+  @Get('/audit')
+  @Roles(['auditor'])
+  getAuditLog() {
+    // ...
+  }
+}
+
+@Guard()
+class RolesGuard extends NestifyGuard {
+  canActivate(context: ExecutionContext) {
+    const controller = context.getClass();
+    const handler = context.getHandler();
+    const roles =
+      getMethodMetadata<string[]>(controller, handler.name, 'roles') ??
+      getClassMetadata<string[]>(controller, 'roles');
+
+    const currentRole = 'admin'; // Read this from the authenticated request or a service
+    return !roles?.length || roles.includes(currentRole);
+  }
+}
+```
+
+The available helpers are:
+
+- `createDecorator<T>(key)` — creates a decorator usable on classes and methods.
+- `getClassMetadata<T>(controller, key)` — reads class metadata.
+- `getMethodMetadata<T>(controller, methodName, key)` — reads method metadata.
+- `setClassMetadata(context, key, value)` / `setMethodMetadata(context, key, value)` — write metadata from a custom Stage 3 decorator implementation.
+- `SymbolMetadata` — exposes the low-level Stage 3 metadata symbol for advanced use; prefer the helpers above.
+
 ### Middleware System
 
 There are four kinds of middleware: **Guards**, **Interceptors**, **Pipes** and **Filters**.
@@ -174,8 +214,8 @@ There are four kinds of middleware: **Guards**, **Interceptors**, **Pipes** and 
 Execution order of a single request:
 
 ```
-Request → Interceptor(enter) → Guard → Pipe → Controller method → Interceptor(leave)
-                   └────────── Exception → Filter ──────────┘
+Request → Guard → Interceptor(enter) → Pipe → Controller method → Interceptor(leave) → Response
+            └──────────────────── Unhandled exception → Filter ────────────────────┘
 ```
 
 #### Registration Rules (Important)
@@ -183,7 +223,7 @@ Request → Interceptor(enter) → Guard → Pipe → Controller method → Inte
 - **Built-in middlewares are auto-registered**: the framework's preset pipes (`PipeBody` / `PipeQuery` / `PipeParams` / `PipeIp` / `PipeRaw` / `PipeFile`) and `JwtGuard` are automatically instantiated during `apply()`. They work out of the box, no configuration needed.
 - **Custom middlewares must be registered**: like NestJS, classes decorated by `@Guard()` / `@Interceptor()` / `@Pipe()` / `@Filter()` must appear in some module's `providers`, otherwise route registration fails with `Cannot find class for token`.
 - **Where to apply**: `@UseGuards` / `@UseInterceptors` / `@UsePipes` / `@UseFilters` can be applied on a **controller class** (affects all its routes) or on a **method** (affects only that route). Middlewares of the same kind run in order: global → controller → method.
-- Middleware classes are `Injectable` too, so `@Inject` property injection works inside them.
+- Custom middleware classes must **extend** `NestifyGuard`, `NestifyInterceptor`, `NestifyPipe`, or `NestifyFilter`; the decorators validate the base class at runtime. Middleware classes are also `Injectable`, so `@Inject` property injection works inside them.
 
 #### Guards
 
@@ -191,7 +231,7 @@ Guards control access to routes. Returning `false` or throwing from `canActivate
 
 ```typescript
 @Guard()
-class AuthGuard implements NestifyGuard {
+class AuthGuard extends NestifyGuard {
   // Dependency injection works
   @Inject(AuthService)
   authService: AuthService;
@@ -235,19 +275,27 @@ class AppModule {}
 
 #### Interceptors
 
-Interceptors run before the controller method; the returned function is called after the method finishes (useful for logging, timing, response wrapping). The returned function receives the handler's return value (or the caught error):
+An interceptor receives `(context, next)` before pipes and the controller method run. It must return `next`; register reverse-phase callbacks with its Promise-like `.then()` and `.catch()` methods:
 
 ```typescript
 @Interceptor()
-class LoggingInterceptor implements NestifyInterceptor {
-  intercept(context: ExecutionContext) {
+class LoggingInterceptor extends NestifyInterceptor {
+  intercept(context: ExecutionContext, next: InterceptorNextHandler) {
     const start = Date.now();
     console.log('Request started');
 
-    return (result: any) => {
-      console.log(`Request completed in ${Date.now() - start}ms`);
-      return result; // Can be modified; the return value becomes the final response
-    };
+    return next
+      .then((result: any) => {
+        console.log(`Request completed in ${Date.now() - start}ms`);
+        return {
+          data: result,
+          elapsed: Date.now() - start,
+        }; // Passed to the next outer interceptor, then used as the response
+      })
+      .catch((error: unknown) => {
+        console.error('Response mapping failed', error);
+        throw error;
+      });
   }
 }
 
@@ -256,10 +304,18 @@ class LoggingInterceptor implements NestifyInterceptor {
 class ApiController {
   @Get('/data')
   getData() {
-    return { data: 'example' };
+    return { value: 'example' };
   }
 }
 ```
+
+Important interceptor semantics:
+
+- Interceptors enter in registration order: global → controller → method.
+- Their `next.then(...)` callbacks run in reverse order: method → controller → global.
+- Each `.then()` receives the current result, and its return value is passed to the next outer interceptor.
+- If an interceptor's `.then()` callback throws or rejects, its matching `.catch()` callback can recover by returning a value or continue the failure by throwing.
+- `intercept()` must return the provided `next` handler; returning a standalone function is no longer supported.
 
 Global interceptor: `{ provide: APP_INTERCEPTOR, useClass: LoggingInterceptor }`.
 
@@ -271,7 +327,7 @@ Pipes validate and transform input data. Each pipe's return value becomes the ne
 
 ```typescript
 @Pipe()
-class TrimPipe implements NestifyPipe {
+class TrimPipe extends NestifyPipe {
   async transform(context: ExecutionContext, input: any[], schema?: PipeFullSchema) {
     // `input` comes from the previous step; the return value goes to the next pipe or the handler
     return input.map((v) => (typeof v === 'string' ? v.trim() : v));
@@ -342,7 +398,7 @@ Filters handle exceptions thrown by routes. Specify the exception classes to cat
 
 ```typescript
 @Filter(HttpException)
-class HttpExceptionFilter implements NestifyFilter {
+class HttpExceptionFilter extends NestifyFilter {
   catch(context: ExecutionContext, exception: HttpException) {
     const response = context.switchToHttp().getReply();
     response.status(exception.status).send({
@@ -466,6 +522,7 @@ import {
   Params,
   UseGuards,
   Guard,
+  NestifyGuard,
   nestify,
 } from 'nestify-js';
 
@@ -494,7 +551,7 @@ class UserService {
 
 // Guard
 @Guard()
-class AuthGuard {
+class AuthGuard extends NestifyGuard {
   canActivate(context) {
     // Simple auth check
     const request = context.switchToHttp().getRequest();
