@@ -1,6 +1,6 @@
 {
   "name": "@nestify-js/shared",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Shared utilities and types for nestify-js packages",
   "type": "module",
   "main": "./dist/index.cjs",
