@@ -1,6 +1,6 @@
 {
   "name": "nestify-js",
-  "version": "0.3.8",
+  "version": "0.4.1",
   "description": "A NestJS like fastify plugin for dependency injection",
   "description_zh": "一个类似于 NestJS 的 Fastify 依赖注入插件",
   "purpose": "npm",

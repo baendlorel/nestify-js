@@ -1,6 +1,6 @@
 {
   "name": "@nestify-js/core",
-  "version": "0.3.8",
+  "version": "0.4.1",
   "description": "Core dependency injection system for nestify-js",
   "type": "module",
   "main": "./dist/index.cjs",
