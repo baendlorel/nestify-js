@@ -163,6 +163,46 @@ class UserController {
 class UserModule {}
 ```
 
+### 自定义装饰器与元数据
+
+`createDecorator(key)` 可以创建一个用于类或方法的 Stage 3 装饰器并保存自定义元数据。元数据 getter 现在直接接收控制器类，不再接收 `ExecutionContext`：
+
+```typescript
+const Roles = createDecorator<string[]>('roles');
+
+@Roles(['admin'])
+@Controller('/admin')
+class AdminController {
+  @Get('/audit')
+  @Roles(['auditor'])
+  getAuditLog() {
+    // ...
+  }
+}
+
+@Guard()
+class RolesGuard extends NestifyGuard {
+  canActivate(context: ExecutionContext) {
+    const controller = context.getClass();
+    const handler = context.getHandler();
+    const roles =
+      getMethodMetadata<string[]>(controller, handler.name, 'roles') ??
+      getClassMetadata<string[]>(controller, 'roles');
+
+    const currentRole = 'admin'; // 实际项目中应从已认证的请求或服务中读取
+    return !roles?.length || roles.includes(currentRole);
+  }
+}
+```
+
+可用的辅助函数包括：
+
+- `createDecorator<T>(key)`：创建可用于类和方法的装饰器。
+- `getClassMetadata<T>(controller, key)`：读取类元数据。
+- `getMethodMetadata<T>(controller, methodName, key)`：读取方法元数据。
+- `setClassMetadata(context, key, value)` / `setMethodMetadata(context, key, value)`：在自行编写的 Stage 3 装饰器中写入元数据。
+- `SymbolMetadata`：提供底层 Stage 3 元数据 Symbol，仅建议高级场景使用；一般优先使用上述辅助函数。
+
 ### 中间件系统
 
 中间件共四种：**守卫（Guard）**、**拦截器（Interceptor）**、**管道（Pipe）**、**过滤器（Filter）**。
@@ -170,8 +210,8 @@ class UserModule {}
 单个请求的执行顺序：
 
 ```
-请求 → 拦截器(进入) → 守卫 → 管道 → 控制器方法 → 拦截器(离开)
-              └──────── 异常 → 过滤器 ─────────┘
+请求 → 守卫 → 拦截器(进入) → 管道 → 控制器方法 → 拦截器(离开) → 响应
+          └────────────────── 未处理异常 → 过滤器 ──────────────────┘
 ```
 
 #### 注册规则（重要）
@@ -179,7 +219,7 @@ class UserModule {}
 - **内置中间件自动注册**：框架内置的管道（`PipeBody` / `PipeQuery` / `PipeParams` / `PipeIp` / `PipeRaw` / `PipeFile`）和 `JwtGuard` 会在 `apply()` 时自动创建实例，开箱即用，无需任何配置。
 - **自定义中间件必须注册**：被 `@Guard()` / `@Interceptor()` / `@Pipe()` / `@Filter()` 标记的类和 NestJS 一样，必须出现在某个模块的 `providers` 中，否则路由注册时会报 `Cannot find class for token` 错误。
 - **使用位置**：`@UseGuards` / `@UseInterceptors` / `@UsePipes` / `@UseFilters` 既可以标在**控制器类**上（对该控制器所有路由生效），也可以标在**方法**上（只对该路由生效）。同类中间件按 全局 → 控制器 → 方法 的顺序依次执行。
-- 中间件类本身也是 `Injectable`，支持 `@Inject` 属性注入。
+- 自定义中间件类必须**继承** `NestifyGuard`、`NestifyInterceptor`、`NestifyPipe` 或 `NestifyFilter`，装饰器会在运行时校验基类。中间件类本身也是 `Injectable`，支持 `@Inject` 属性注入。
 
 #### 守卫 (Guards)
 
@@ -187,7 +227,7 @@ class UserModule {}
 
 ```typescript
 @Guard()
-class AuthGuard implements NestifyGuard {
+class AuthGuard extends NestifyGuard {
   // 支持依赖注入
   @Inject(AuthService)
   authService: AuthService;
@@ -231,19 +271,27 @@ class AppModule {}
 
 #### 拦截器 (Interceptors)
 
-拦截器在进入控制器方法前执行，返回的函数会在方法结束后调用（可用于日志、耗时统计、响应包装）。返回的函数会收到控制器方法的返回值（或捕获到的错误）：
+拦截器会在管道和控制器方法执行前接收 `(context, next)`。`intercept()` 必须返回传入的 `next`，并通过类似 Promise 的 `.then()` 和 `.catch()` 注册反向阶段的处理逻辑：
 
 ```typescript
 @Interceptor()
-class LoggingInterceptor implements NestifyInterceptor {
-  intercept(context: ExecutionContext) {
+class LoggingInterceptor extends NestifyInterceptor {
+  intercept(context: ExecutionContext, next: InterceptorNextHandler) {
     const start = Date.now();
     console.log('请求开始');
 
-    return (result: any) => {
-      console.log(`请求完成，耗时 ${Date.now() - start}ms`);
-      return result; // 可以修改后返回，作为最终的响应值
-    };
+    return next
+      .then((result: any) => {
+        console.log(`请求完成，耗时 ${Date.now() - start}ms`);
+        return {
+          data: result,
+          elapsed: Date.now() - start,
+        }; // 该值会继续传给外层拦截器，最终作为响应值
+      })
+      .catch((error: unknown) => {
+        console.error('响应转换失败', error);
+        throw error;
+      });
   }
 }
 
@@ -252,10 +300,18 @@ class LoggingInterceptor implements NestifyInterceptor {
 class ApiController {
   @Get('/data')
   getData() {
-    return { data: '示例数据' };
+    return { value: '示例数据' };
   }
 }
 ```
+
+拦截器的重要执行规则：
+
+- 进入阶段按注册顺序执行：全局 → 控制器 → 方法。
+- `next.then(...)` 按相反顺序执行：方法 → 控制器 → 全局。
+- 每个 `.then()` 接收当前结果，其返回值会传给下一个外层拦截器。
+- 如果某个拦截器的 `.then()` 抛出异常或返回 rejected Promise，会进入它对应的 `.catch()`；`.catch()` 可以返回值恢复流程，也可以继续抛出异常。
+- `intercept()` 必须返回传入的 `next`；旧版直接返回函数的写法已不再支持。
 
 全局拦截器使用 `{ provide: APP_INTERCEPTOR, useClass: LoggingInterceptor }`。
 
@@ -267,7 +323,7 @@ class ApiController {
 
 ```typescript
 @Pipe()
-class TrimPipe implements NestifyPipe {
+class TrimPipe extends NestifyPipe {
   async transform(context: ExecutionContext, input: any[], schema?: PipeFullSchema) {
     // input 是上一步的数据；返回值传给下一个管道或控制器方法
     return input.map((v) => (typeof v === 'string' ? v.trim() : v));
@@ -338,7 +394,7 @@ class UserController {
 
 ```typescript
 @Filter(HttpException)
-class HttpExceptionFilter implements NestifyFilter {
+class HttpExceptionFilter extends NestifyFilter {
   catch(context: ExecutionContext, exception: HttpException) {
     const response = context.switchToHttp().getReply();
     response.status(exception.status).send({
@@ -463,6 +519,7 @@ import {
   Params,
   UseGuards,
   Guard,
+  NestifyGuard,
   nestify,
 } from 'nestify-js';
 
@@ -491,7 +548,7 @@ class UserService {
 
 // 守卫
 @Guard()
-class AuthGuard {
+class AuthGuard extends NestifyGuard {
   canActivate(context) {
     // 简单的认证检查
     const request = context.switchToHttp().getRequest();
