@@ -35,6 +35,10 @@ export function getClassMetadata<T = unknown>(cls: Constructor, key: SSKey): T |
   return metaGet<T>(cls, [sym.custom.root, key]);
 }
 
+export function setClassMetadata<T = unknown>(context: ClassDecoratorContext, key: SSKey, metadata: T) {
+  metaSet<T>(context, [sym.custom.root, key], metadata);
+}
+
 /**8-
  * Retrieves class method metadata
  */

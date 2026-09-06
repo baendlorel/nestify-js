@@ -7,7 +7,13 @@ export { Controller } from './decorators/router/controller.js';
 export { Inject } from './decorators/inject.js';
 export { Injectable } from './decorators/injectable.js';
 export { Module, toModule } from './decorators/module.js';
-export { createDecorator, getClassMetadata, getMethodMetadata } from './decorators/custom.js';
+export {
+  createDecorator,
+  getClassMetadata,
+  getMethodMetadata,
+  setClassMetadata,
+  setMethodMetadata,
+} from './decorators/custom.js';
 
 import { sym } from '@nestify-js/shared';
 
