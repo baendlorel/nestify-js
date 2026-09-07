@@ -1,9 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FastifySchema } from 'fastify';
-import { type Constructor, type SSKey, type OrPromise } from '@nestify-js/shared';
+import type { Constructor, SSKey, OrPromise, AnyFunction } from '@nestify-js/shared';
 import type { ExecutionContext } from '@core/common/execution-context.js';
 import type { InjectToken } from './injection.js';
-import { _iden, _idenErr } from '@core/test.js';
+
+const _iden = (v: any) => v;
+
+const _idenErr = (e: any) => {
+  throw e;
+};
 
 /**
  * Get middlewares for a class method
@@ -67,7 +72,7 @@ export class InterceptorNextHandler {
    * Used to map returned value of a controller.
    * @internal
    */
-  onNext: (value: any) => any = _iden;
+  onMap: (value: any) => any = _iden;
 
   /**
    * Used to catch errors.
@@ -75,14 +80,34 @@ export class InterceptorNextHandler {
    */
   onError: (error: any) => any = _idenErr;
 
+  onTap: (value: any) => any = _iden;
+
+  // TODO 重构为按注册的顺序运行
+  queue: Array<{ type: 'map' | 'tap' }> = [];
+
+  catchers: AnyFunction[] = [];
+
   /**
    * Register the controller result mapper.
    */
   map(fn: (value: any) => any): this {
-    this.onNext = fn;
+    this.onMap = fn;
     return this;
   }
 
+  /**
+   * Run something with the controller result before it is returned. Usually used for logging.
+   */
+  tap(fn: (value: any) => void): this {
+    this.onTap = fn;
+    return this;
+  }
+
+  /**
+   * Register the error handler for this interceptor.
+   * - If successfully catched and handled, the result will be passed to the next interceptor.
+   * - If not handled or catcher function throws another error, the interception process will be stopped and enter the filter process.
+   */
   catch(fn: (error: any) => any): this {
     this.onError = fn;
     return this;
