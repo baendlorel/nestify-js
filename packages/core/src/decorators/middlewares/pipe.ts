@@ -1,5 +1,6 @@
-import type { AnyFunction, Constructor } from '@core/types/primitives.js';
-import { NestifyPipe, type PipeOptions } from '@core/types/middleware.js';
+import type { AnyFunction, Constructor, OrPromise } from '@core/types/primitives.js';
+import type { ExecutionContext } from '@core/common/execution-context.js';
+import type { NestifyPipeLike, PipeFullSchema, PipeOptions } from '@core/types/middleware.js';
 import { subclassOf } from '@nestify-js/shared';
 
 import { _isConstructable, _isKey, sym } from '@nestify-js/shared';
@@ -9,6 +10,24 @@ import { metaSetPipe, metaIsPipe, metaSetUsePipes, metaSetProvider } from '@core
 
 import { _Injectable } from '../injectable.js';
 import { expectMiddleware } from './expect-middleware.js';
+
+/**
+ * You must override the `transform` method in your custom pipe class.
+ */
+export class NestifyPipe implements NestifyPipeLike {
+  /**
+   * Like transform in NestJS Pipe, validation and transformation are done here
+   *
+   * @param context like in NestJS, it can `.switchToHttp()` and get `request` and `reply` object
+   * @param input comes from last pipe's return value, or `undefined` if it's the first
+   * @param schema validation schema, if provided in the pipe options
+   * @returns returned value will be passed to the next pipe. The last pipe's return value will be passed to the controller.
+   */
+  transform(context: ExecutionContext, input: any[], schema: PipeFullSchema): OrPromise<any[]>;
+  transform(_context: ExecutionContext, input: any[], _schema: PipeFullSchema): OrPromise<any[]> {
+    return input;
+  }
+}
 
 /**
  * Create a Pipe class by decorate it.

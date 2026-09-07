@@ -1,12 +1,28 @@
-import type { AnyFunction, Constructor } from '@core/types/primitives.js';
+import type { AnyFunction, Constructor, OrPromise } from '@core/types/primitives.js';
+import type { ExecutionContext } from '@core/common/execution-context.js';
 import type { InjectToken } from '@core/types/injection.js';
-import { NestifyGuard } from '@core/types/middleware.js';
+import type { NestifyGuardLike } from '@core/types/middleware.js';
 import { sym, subclassOf } from '@nestify-js/shared';
 
 import { expect } from '@core/asserts/index.js';
 import { metaSetGuard, metaSetProvider, metaSetUseGuards } from '@core/register/meta.js';
 import { _Injectable } from '../injectable.js';
 import { expectMiddleware } from './expect-middleware.js';
+
+/**
+ * You must override the `canActivate` method in your custom guard class.
+ */
+export class NestifyGuard implements NestifyGuardLike {
+  /**
+   * Guard
+   * - you can use `throw` when guard fails
+   * - will stop and reply if any guard returns `false` or throws an error
+   * @param context like in NestJS, it can `.switchToHttp()` and get `request` and `reply` object
+   * - if `previousReturn` is `undefined`, it will be ignored.
+   */
+  canActivate(context: ExecutionContext): OrPromise | OrPromise<boolean>;
+  canActivate(_context: ExecutionContext): OrPromise | OrPromise<boolean> {}
+}
 
 /**
  * Use to define a Guard class

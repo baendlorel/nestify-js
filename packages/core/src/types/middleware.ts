@@ -49,13 +49,13 @@ export interface PipeOptions {
    * Pipe class
    * - if `inputPath` is not given, pipe transformer will take the whole `request`
    */
-  pipe: SSKey | Constructor<NestifyPipe>;
+  pipe: SSKey | Constructor<NestifyPipeLike>;
 }
 
 /**
  * You must override the `canActivate` method in your custom guard class.
  */
-export class NestifyGuard {
+export interface NestifyGuardLike {
   /**
    * Guard
    * - you can use `throw` when guard fails
@@ -64,75 +64,43 @@ export class NestifyGuard {
    * - if `previousReturn` is `undefined`, it will be ignored.
    */
   canActivate(context: ExecutionContext): OrPromise | OrPromise<boolean>;
-  canActivate(_context: ExecutionContext): OrPromise | OrPromise<boolean> {}
 }
 
-export class InterceptorNextHandler {
-  /**
-   * Used to map returned value of a controller.
-   * @internal
-   */
-  onMap: (value: any) => any = _iden;
-
-  /**
-   * Used to catch errors.
-   * @internal
-   */
-  onError: (error: any) => any = _idenErr;
-
-  onTap: (value: any) => any = _iden;
-
-  // TODO 重构为按注册的顺序运行
-  queue: Array<{ type: 'map' | 'tap' }> = [];
-
-  catchers: AnyFunction[] = [];
-
+export interface InterceptorNextHandlerLike {
   /**
    * Register the controller result mapper.
    */
-  map(fn: (value: any) => any): this {
-    this.onMap = fn;
-    return this;
-  }
+  map(fn: (value: any) => any): this;
 
   /**
    * Run something with the controller result before it is returned. Usually used for logging.
    */
-  tap(fn: (value: any) => void): this {
-    this.onTap = fn;
-    return this;
-  }
+  tap(fn: (value: any) => void): this;
 
   /**
    * Register the error handler for this interceptor.
    * - If successfully catched and handled, the result will be passed to the next interceptor.
    * - If not handled or catcher function throws another error, the interception process will be stopped and enter the filter process.
    */
-  catch(fn: (error: any) => any): this {
-    this.onError = fn;
-    return this;
-  }
+  catch(fn: (error: any) => any): this;
 }
 
 /**
  * You must override the `intercept` method in your custom interceptor class.
  */
-export class NestifyInterceptor {
+export interface NestifyInterceptorLike {
   /**
    * Called when entering the controller method
    * @param context like in NestJS, it can `.switchToHttp()` and get `request` and `reply` object
    * @returns returned function will be called when leaving the controller method
    */
-  intercept(context: ExecutionContext, next: InterceptorNextHandler): OrPromise<InterceptorNextHandler>;
-  intercept(_context: ExecutionContext, next: InterceptorNextHandler) {
-    return next;
-  }
+  intercept(context: ExecutionContext, next: InterceptorNextHandlerLike): OrPromise<InterceptorNextHandlerLike>;
 }
 
 /**
  * You must override the `transform` method in your custom pipe class.
  */
-export class NestifyPipe {
+export interface NestifyPipeLike {
   /**
    * Like transform in NestJS Pipe, validation and transformation are done here
    *
@@ -142,9 +110,6 @@ export class NestifyPipe {
    * @returns returned value will be passed to the next pipe. The last pipe's return value will be passed to the controller.
    */
   transform(context: ExecutionContext, input: any[], schema: PipeFullSchema): OrPromise<any[]>;
-  transform(_context: ExecutionContext, input: any[], _schema: PipeFullSchema): OrPromise<any[]> {
-    return input;
-  }
 }
 
 /**
@@ -158,10 +123,10 @@ export interface NestifyFilterLike {
   catch(context: ExecutionContext, exception: unknown): OrPromise;
 }
 
-export type NestifyMiddleware = NestifyInterceptor | NestifyGuard | NestifyFilterLike | NestifyPipe;
+export type NestifyMiddleware = NestifyInterceptorLike | NestifyGuardLike | NestifyFilterLike | NestifyPipeLike;
 
 // & Middleware tasks
-export type GuardTask = NestifyGuard['canActivate'];
-export type PipeTask = NestifyPipe['transform'];
-export type InterceptorTask = NestifyInterceptor['intercept'];
+export type GuardTask = NestifyGuardLike['canActivate'];
+export type PipeTask = NestifyPipeLike['transform'];
+export type InterceptorTask = NestifyInterceptorLike['intercept'];
 export type FilterTask = NestifyFilterLike['catch'];

@@ -1,12 +1,12 @@
 import { _define, type Constructor } from '@nestify-js/shared';
-import { NestifyGuard } from '@core/types/middleware.js';
+import type { NestifyGuardLike } from '@core/types/middleware.js';
 import { JwtService } from './jwt.js';
 
-import { _GuardSet } from '@core/decorators/middlewares/guard.js';
+import { _GuardSet, NestifyGuard } from '@core/decorators/middlewares/guard.js';
 import { ExecutionContext } from '@core/common/execution-context.js';
 import { jwt as defaultJwt } from './jwt.js';
 
-const guards = new Map<typeof defaultJwt, Constructor<NestifyGuard>>();
+const guards = new Map<typeof defaultJwt, Constructor<NestifyGuardLike>>();
 
 /**
  * JWT Guard - protects routes by validating JWT tokens

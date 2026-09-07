@@ -2,7 +2,11 @@ import type { InjectToken } from '@core/types/injection.js';
 
 import { promiseTry } from '@nestify-js/shared';
 import { createSerialTaskAsync, TaskifyAsync } from 'serial-task';
-import { InterceptorNextHandler, type InterceptorTask, type NestifyInterceptor } from '@core/types/middleware.js';
+import {
+  InterceptorNextHandler,
+  type InterceptorTask,
+  type NestifyInterceptorLike,
+} from '@core/types/middleware.js';
 import { injector } from '@core/register/lazy-injector.js';
 
 /**
@@ -10,7 +14,7 @@ import { injector } from '@core/register/lazy-injector.js';
  */
 export function createInterceptor(tokens: InjectToken[]): TaskifyAsync<InterceptorTask> {
   return createSerialTaskAsync<InterceptorTask>({
-    tasks: injector.getMiddlewareHooks<NestifyInterceptor>(tokens, 'intercept'),
+    tasks: injector.getMiddlewareHooks<NestifyInterceptorLike>(tokens, 'intercept'),
     resultWrapper: (_task, _i, _tasks, args) => [args[0], new InterceptorNextHandler()],
     breakCondition: () => false,
     skipCondition: () => false,

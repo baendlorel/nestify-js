@@ -1,5 +1,5 @@
 import { createSerialTaskAsync, TaskifyAsync } from 'serial-task';
-import { PipeOptions, PipeTask, PipeFullSchema, NestifyPipe } from '@core/types/middleware.js';
+import type { PipeOptions, PipeTask, PipeFullSchema, NestifyPipeLike } from '@core/types/middleware.js';
 import { InjectToken } from '@core/types/injection.js';
 
 import { injector } from '@core/register/lazy-injector.js';
@@ -15,7 +15,7 @@ export function createPipe(pipeOpts: PipeOptions[]): TaskifyAsync<PipeTask> {
   }
 
   return createSerialTaskAsync<PipeTask>({
-    tasks: injector.getMiddlewareHooks<NestifyPipe>(tokens, 'transform'),
+    tasks: injector.getMiddlewareHooks<NestifyPipeLike>(tokens, 'transform'),
     // * the [cx] is the initial args of the whole pipeline.
     // So it would be [context, input?, schema?]
     // & Fisrt call of the whole task will use this wrapper to wrap values.

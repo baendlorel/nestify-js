@@ -28,17 +28,26 @@ import { sym } from '@nestify-js/shared';
 export const SymbolMetadata = sym.metadata;
 
 // middlewares
-export { Guard } from './decorators/middlewares/guard.js';
-export { Interceptor } from './decorators/middlewares/interceptor.js';
-export { Pipe } from './decorators/middlewares/pipe.js';
-export { Filter } from './decorators/middlewares/filter.js';
+export { NestifyInterceptorNextHandler } from './decorators/middlewares/interceptor.js';
+export { Guard, NestifyGuard } from './decorators/middlewares/guard.js';
+export { Interceptor, NestifyInterceptor } from './decorators/middlewares/interceptor.js';
+export { Pipe, NestifyPipe } from './decorators/middlewares/pipe.js';
+export { Filter, NestifyFilter } from './decorators/middlewares/filter.js';
 
 export { UseGuards } from './decorators/middlewares/guard.js';
 export { UseInterceptors } from './decorators/middlewares/interceptor.js';
 export { UsePipes } from './decorators/middlewares/pipe.js';
 export { UseFilters } from './decorators/middlewares/filter.js';
-export { InterceptorNextHandler, NestifyGuard, NestifyInterceptor, NestifyPipe, NestifyFilter } from './types/middleware.js';
-export type { PipeSchema, PipeFullSchema, PipeOptions, RouteApiSchema } from './types/middleware.js';
+export type {
+  NestifyFilterLike,
+  NestifyGuardLike,
+  NestifyInterceptorLike,
+  NestifyPipeLike,
+  PipeSchema,
+  PipeFullSchema,
+  PipeOptions,
+  RouteApiSchema,
+} from './types/middleware.js';
 
 export type { NestifyOptions } from '@core/types/index.js';
 
