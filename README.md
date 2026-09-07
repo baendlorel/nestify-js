@@ -275,7 +275,7 @@ class AppModule {}
 
 #### Interceptors
 
-An interceptor receives `(context, next)` before pipes and the controller method run. It must return `next`; register reverse-phase callbacks with its Promise-like `.then()` and `.catch()` methods:
+An interceptor receives `(context, next)` before pipes and the controller method run. It must return `next`; register reverse-phase callbacks with its chainable `.map()` and `.catch()` methods:
 
 ```typescript
 @Interceptor()
@@ -285,7 +285,7 @@ class LoggingInterceptor extends NestifyInterceptor {
     console.log('Request started');
 
     return next
-      .then((result: any) => {
+      .map((result: any) => {
         console.log(`Request completed in ${Date.now() - start}ms`);
         return {
           data: result,
@@ -312,9 +312,9 @@ class ApiController {
 Important interceptor semantics:
 
 - Interceptors enter in registration order: global → controller → method.
-- Their `next.then(...)` callbacks run in reverse order: method → controller → global.
-- Each `.then()` receives the current result, and its return value is passed to the next outer interceptor.
-- If an interceptor's `.then()` callback throws or rejects, its matching `.catch()` callback can recover by returning a value or continue the failure by throwing.
+- Their `next.map(...)` callbacks run in reverse order: method → controller → global.
+- Each `.map()` receives the current result, and its return value is passed to the next outer interceptor.
+- If an interceptor's `.map()` callback throws or rejects, its matching `.catch()` callback can recover by returning a value or continue the failure by throwing.
 - `intercept()` must return the provided `next` handler; returning a standalone function is no longer supported.
 
 Global interceptor: `{ provide: APP_INTERCEPTOR, useClass: LoggingInterceptor }`.
