@@ -1,13 +1,26 @@
-import type { AnyFunction, Constructor } from '@core/types/primitives.js';
+import type { AnyFunction, Constructor, OrPromise } from '@core/types/primitives.js';
+import type { ExecutionContext } from '@core/common/execution-context.js';
 import type { InjectToken } from '@core/types/injection.js';
-import { NestifyFilter } from '@core/types/middleware.js';
-import { subclassOf } from '@nestify-js/shared';
+import type { NestifyFilterLike } from '@core/types/middleware.js';
 
+import { subclassOf } from '@nestify-js/shared';
 import { expect } from '@core/asserts/index.js';
 import { metaSetFilters, metaSetUseFilters } from '@core/register/meta.js';
 
 import { _Injectable } from '../injectable.js';
 import { expectMiddleware } from './expect-middleware.js';
+
+/**
+ * You must override the `catch` method in your custom filter class.
+ */
+export class NestifyFilter implements NestifyFilterLike {
+  /**
+   * @param context like in NestJS, it can `.switchToHttp()` and get `request` and `reply` object
+   * @param exception catched exception
+   */
+  catch(context: ExecutionContext, exception: unknown): OrPromise;
+  catch(_context: ExecutionContext, _exception: unknown): OrPromise {}
+}
 
 /**
  * Set the exception classes to be caught by this filter.

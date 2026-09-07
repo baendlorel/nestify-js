@@ -150,19 +150,18 @@ export class NestifyPipe {
 /**
  * You must override the `catch` method in your custom filter class.
  */
-export class NestifyFilter {
+export interface NestifyFilterLike {
   /**
    * @param context like in NestJS, it can `.switchToHttp()` and get `request` and `reply` object
    * @param exception catched exception
    */
   catch(context: ExecutionContext, exception: unknown): OrPromise;
-  catch(_context: ExecutionContext, _exception: unknown): OrPromise {}
 }
 
-export type NestifyMiddleware = NestifyInterceptor | NestifyGuard | NestifyFilter | NestifyPipe;
+export type NestifyMiddleware = NestifyInterceptor | NestifyGuard | NestifyFilterLike | NestifyPipe;
 
 // & Middleware tasks
 export type GuardTask = NestifyGuard['canActivate'];
 export type PipeTask = NestifyPipe['transform'];
 export type InterceptorTask = NestifyInterceptor['intercept'];
-export type FilterTask = NestifyFilter['catch'];
+export type FilterTask = NestifyFilterLike['catch'];
