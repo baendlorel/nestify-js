@@ -75,7 +75,10 @@ export class InterceptorNextHandler {
    */
   onError: (error: any) => any = _idenErr;
 
-  then(fn: (value: any) => any): this {
+  /**
+   * Register the controller result mapper.
+   */
+  map(fn: (value: any) => any): this {
     this.onNext = fn;
     return this;
   }

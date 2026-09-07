@@ -1,5 +1,4 @@
 import type { AnyFunction, Constructor } from '@core/types/primitives.js';
-import { _isFunction, promiseTry } from '@nestify-js/shared';
 
 import {
   InterceptorNextHandler,

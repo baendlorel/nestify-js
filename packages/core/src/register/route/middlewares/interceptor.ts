@@ -40,11 +40,11 @@ export async function runReverseInterceptors(inh: InterceptorNextHandler[], cont
     const h = inh[i];
 
     // Result not null, means success
-    await promiseTry(h.onNext, result).then(resolve).catch(reject);
+    await promiseTry(h.onNext, undefined, result).then(resolve).catch(reject);
 
     // Means should go to error handle
     if (err !== Void) {
-      await promiseTry(h.onError, err).then(resolve).catch(reject);
+      await promiseTry(h.onError, undefined, err).then(resolve).catch(reject);
     }
 
     // ! If there is still an error, throw it. Following interceptors are ignored.

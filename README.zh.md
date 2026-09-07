@@ -271,7 +271,7 @@ class AppModule {}
 
 #### 拦截器 (Interceptors)
 
-拦截器会在管道和控制器方法执行前接收 `(context, next)`。`intercept()` 必须返回传入的 `next`，并通过类似 Promise 的 `.then()` 和 `.catch()` 注册反向阶段的处理逻辑：
+拦截器会在管道和控制器方法执行前接收 `(context, next)`。`intercept()` 必须返回传入的 `next`，并通过可链式调用的 `.map()` 和 `.catch()` 注册反向阶段的处理逻辑：
 
 ```typescript
 @Interceptor()
@@ -281,7 +281,7 @@ class LoggingInterceptor extends NestifyInterceptor {
     console.log('请求开始');
 
     return next
-      .then((result: any) => {
+      .map((result: any) => {
         console.log(`请求完成，耗时 ${Date.now() - start}ms`);
         return {
           data: result,
@@ -308,9 +308,9 @@ class ApiController {
 拦截器的重要执行规则：
 
 - 进入阶段按注册顺序执行：全局 → 控制器 → 方法。
-- `next.then(...)` 按相反顺序执行：方法 → 控制器 → 全局。
-- 每个 `.then()` 接收当前结果，其返回值会传给下一个外层拦截器。
-- 如果某个拦截器的 `.then()` 抛出异常或返回 rejected Promise，会进入它对应的 `.catch()`；`.catch()` 可以返回值恢复流程，也可以继续抛出异常。
+- `next.map(...)` 按相反顺序执行：方法 → 控制器 → 全局。
+- 每个 `.map()` 接收当前结果，其返回值会传给下一个外层拦截器。
+- 如果某个拦截器的 `.map()` 抛出异常或返回 rejected Promise，会进入它对应的 `.catch()`；`.catch()` 可以返回值恢复流程，也可以继续抛出异常。
 - `intercept()` 必须返回传入的 `next`；旧版直接返回函数的写法已不再支持。
 
 全局拦截器使用 `{ provide: APP_INTERCEPTOR, useClass: LoggingInterceptor }`。
