@@ -31,16 +31,16 @@ export class NestifyInterceptorNextHandler implements InterceptorNextHandlerLike
       for (let i = 0; i < this.queue.length; i++) {
         const v = this.queue[i];
         if (v.type === 'map') {
-          current = await promiseTry(v.fn, current);
+          current = await promiseTry(v.fn, null, current);
         } else if (v.type === 'tap') {
-          await promiseTry(v.fn, current);
+          await promiseTry(v.fn, null, current);
         }
       }
     } catch (e) {
       currentError = e;
       for (let i = 0; i < this.catchers.length; i++) {
         try {
-          current = await promiseTry(this.catchers[i], currentError);
+          current = await promiseTry(this.catchers[i], null, currentError);
           currentError = sym.none;
           break;
         } catch (nextError) {

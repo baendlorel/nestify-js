@@ -1,17 +1,11 @@
 import type { AnyFunction, Constructor } from '@core/types/primitives.js';
-
-import {
-  InterceptorNextHandler,
-  type FilterTask,
-  type GuardTask,
-  type InterceptorTask,
-  type PipeTask,
-} from '@core/types/middleware.js';
+import type { FilterTask, GuardTask, InterceptorTask, PipeTask } from '@core/types/middleware.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { TaskifyAsync } from 'serial-task';
 
+import { TaskifyAsync } from 'serial-task';
 import { expectArray } from '@core/asserts/index.js';
 import { ExecutionContext } from '@core/common/execution-context.js';
+import { NestifyInterceptorNextHandler } from '@core/decorators/middlewares/interceptor.js';
 import { runReverseInterceptors } from './middlewares/interceptor.js';
 
 interface MiddlewareGroup {
@@ -31,7 +25,7 @@ export function createHandler(controller: Constructor, method: AnyFunction, midd
       await guard(context);
 
       // Interceptors
-      const interceptResult = await interceptor(context, new InterceptorNextHandler());
+      const interceptResult = await interceptor(context, new NestifyInterceptorNextHandler());
 
       // Pipes
       const piped = await pipe(context, [], {});
@@ -45,7 +39,7 @@ export function createHandler(controller: Constructor, method: AnyFunction, midd
       let result = await method(...piped.value);
 
       // Interceptor leave
-      const interceptorNextHandlers = interceptResult.results as InterceptorNextHandler[];
+      const interceptorNextHandlers = interceptResult.results as NestifyInterceptorNextHandler[];
       result = await runReverseInterceptors(interceptorNextHandlers, result);
 
       return result;

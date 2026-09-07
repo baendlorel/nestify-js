@@ -1,7 +1,6 @@
 import type { InjectToken } from '@core/types/injection.js';
 import type { InterceptorTask, NestifyInterceptorLike } from '@core/types/middleware.js';
 
-import { promiseTry, sym } from '@nestify-js/shared';
 import { createSerialTaskAsync, TaskifyAsync } from 'serial-task';
 import { injector } from '@core/register/lazy-injector.js';
 import { NestifyInterceptorNextHandler } from '@core/decorators/middlewares/interceptor.js';
@@ -24,34 +23,9 @@ export function createInterceptor(tokens: InjectToken[]): TaskifyAsync<Intercept
  */
 export async function runReverseInterceptors(inh: NestifyInterceptorNextHandler[], controllerReturn: any) {
   let result = controllerReturn;
-  let err = sym.none;
 
-  const resolve = (v: any) => {
-    result = v;
-    err = sym.none;
-  };
-  const reject = (e: any) => {
-    err = e;
-  };
-
-  // Run reversely
   for (let i = inh.length - 1; i >= 0; i--) {
-    const h = inh[i];
-
-    // TODO await h.run(result);
-
-    // Result not null, means success
-    await promiseTry(h.onMap, undefined, result).then(resolve).catch(reject);
-
-    // Means should go to error handle
-    if (err !== sym.none) {
-      await promiseTry(h.onError, undefined, err).then(resolve).catch(reject);
-    }
-
-    // ! If there is still an error, throw it. Following interceptors are ignored.
-    if (err !== sym.none) {
-      throw err;
-    }
+    result = await inh[i].run(result);
   }
 
   return result;
