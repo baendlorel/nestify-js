@@ -9,6 +9,10 @@ export namespace sym {
    */
   export const metadata = Symbol.metadata ?? Symbol.for('Symbol.metadata');
 
+  /**
+   * A symbol means no value or absence of a meaningful value.
+   * - Distinguishes from `undefined` or `null` which might be meaningful values.
+   */
   export const none = Symbol('none');
 
   /**

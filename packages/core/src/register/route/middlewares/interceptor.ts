@@ -1,13 +1,10 @@
 import type { InjectToken } from '@core/types/injection.js';
+import type { InterceptorTask, NestifyInterceptorLike } from '@core/types/middleware.js';
 
-import { promiseTry } from '@nestify-js/shared';
+import { promiseTry, sym } from '@nestify-js/shared';
 import { createSerialTaskAsync, TaskifyAsync } from 'serial-task';
-import {
-  InterceptorNextHandler,
-  type InterceptorTask,
-  type NestifyInterceptorLike,
-} from '@core/types/middleware.js';
 import { injector } from '@core/register/lazy-injector.js';
+import { NestifyInterceptorNextHandler } from '@core/decorators/middlewares/interceptor.js';
 
 /**
  * Create a preValidation hook for the route
@@ -15,25 +12,23 @@ import { injector } from '@core/register/lazy-injector.js';
 export function createInterceptor(tokens: InjectToken[]): TaskifyAsync<InterceptorTask> {
   return createSerialTaskAsync<InterceptorTask>({
     tasks: injector.getMiddlewareHooks<NestifyInterceptorLike>(tokens, 'intercept'),
-    resultWrapper: (_task, _i, _tasks, args) => [args[0], new InterceptorNextHandler()],
+    resultWrapper: (_task, _i, _tasks, args) => [args[0], new NestifyInterceptorNextHandler()],
     breakCondition: () => false,
     skipCondition: () => false,
   });
 }
 
-const Void = Symbol();
-
 /**
  * Use to run interceptors.
  * - Not using serial task because we need to be easier.
  */
-export async function runReverseInterceptors(inh: InterceptorNextHandler[], controllerReturn: any) {
+export async function runReverseInterceptors(inh: NestifyInterceptorNextHandler[], controllerReturn: any) {
   let result = controllerReturn;
-  let err = Void;
+  let err = sym.none;
 
   const resolve = (v: any) => {
     result = v;
-    err = Void;
+    err = sym.none;
   };
   const reject = (e: any) => {
     err = e;
@@ -43,16 +38,18 @@ export async function runReverseInterceptors(inh: InterceptorNextHandler[], cont
   for (let i = inh.length - 1; i >= 0; i--) {
     const h = inh[i];
 
+    // TODO await h.run(result);
+
     // Result not null, means success
     await promiseTry(h.onMap, undefined, result).then(resolve).catch(reject);
 
     // Means should go to error handle
-    if (err !== Void) {
+    if (err !== sym.none) {
       await promiseTry(h.onError, undefined, err).then(resolve).catch(reject);
     }
 
     // ! If there is still an error, throw it. Following interceptors are ignored.
-    if (err !== Void) {
+    if (err !== sym.none) {
       throw err;
     }
   }
