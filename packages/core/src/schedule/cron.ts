@@ -2,7 +2,7 @@ import type { AnyFunction, Constructor } from '@core/types/primitives.js';
 import type { NestifyInstance } from '@core/types/instance.js';
 
 import { CronExpressionParser } from 'cron-parser';
-import { _entries, promiseTry, sym } from '@nestify-js/shared';
+import { _entries, _noop, getOrInsertWeak, promiseTry, sym } from '@nestify-js/shared';
 import { expectMethodDecorator } from '@core/asserts/decorator-context.js';
 import { metaGet, metaSet } from '@core/register/meta.js';
 
@@ -45,6 +45,8 @@ export function longTimeout(job: JobData, fn: () => void, delay: number): void {
   }
 }
 
+const _jobs = new WeakMap<NestifyInstance, JobData[]>();
+
 /**
  * Bind cron jobs for a given instance
  * This function is called in lazy injector after all instances are created
@@ -52,12 +54,16 @@ export function longTimeout(job: JobData, fn: () => void, delay: number): void {
 export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constructor>, sourceClass: Constructor) {
   const cronMeta = metaGet<Record<string, CronMeta>>(sourceClass, [sym.cron]);
   if (!cronMeta) {
+    app.launchCronJobs ??= _noop;
+    app.startCronJob ??= _noop;
+    app.stopCronJob ??= _noop;
+    app.getCronJobStates ??= () => [];
     return;
   }
 
-  const cronJobs: JobData[] = [];
+  const cronJobs: JobData[] = getOrInsertWeak(_jobs, app, []);
 
-  app.launchCronJobs = () => {
+  app.launchCronJobs ??= () => {
     for (let i = 0; i < cronJobs.length; i++) {
       const job = cronJobs[i];
       // ! Won't start the running jobs.
@@ -68,7 +74,7 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
     }
   };
 
-  app.startCronJob = (uid: string) => {
+  app.startCronJob ??= (uid: string) => {
     if (uid === undefined) {
       console.warn(`startCronJob called with undefined uid, ignored.`);
       return;
@@ -85,7 +91,7 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
     job.fn();
   };
 
-  app.stopCronJob = (uid: string) => {
+  app.stopCronJob ??= (uid: string) => {
     if (uid === undefined) {
       console.warn(`stopCronJob called with undefined uid, ignored.`);
       return;
@@ -105,7 +111,7 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
     job.nextTime = -1;
   };
 
-  app.getCronJobStates = function getCronJobStates() {
+  app.getCronJobStates ??= () => {
     return cronJobs.map(({ uid, expression, nextTime, running }) => ({
       uid,
       expression,
@@ -139,7 +145,7 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
       expression,
       nextTime: -1,
       timer: null,
-      running: true,
+      running: false,
     };
 
     cronJobs.push(job);

@@ -14,3 +14,5 @@ export const _has = Reflect.has;
 export const _construct = Reflect.construct;
 export const _ownKeys = Reflect.ownKeys;
 export const _getPrototypeOf = Reflect.getPrototypeOf;
+
+export const _noop = () => {};

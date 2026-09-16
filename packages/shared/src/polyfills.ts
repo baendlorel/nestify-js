@@ -13,3 +13,17 @@ export function promiseTry<T>(fn: (...args: unknown[]) => T, thisArg?: unknown, 
     return Promise.reject(err);
   }
 }
+
+export function getOrInsert<K, V>(map: Map<K, V>, key: K, defaultValue: V): V {
+  if (!map.has(key)) {
+    map.set(key, defaultValue);
+  }
+  return map.get(key)!;
+}
+
+export function getOrInsertWeak<K extends object | symbol, V>(map: WeakMap<K, V>, key: K, defaultValue: V): V {
+  if (!map.has(key)) {
+    map.set(key, defaultValue);
+  }
+  return map.get(key)!;
+}

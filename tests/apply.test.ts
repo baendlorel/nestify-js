@@ -5,7 +5,7 @@ import { Injectable, Inject } from '@core/index.js';
 import { injector } from '@core/register/lazy-injector.js';
 import { Module } from '@core/decorators/module.js';
 import { apply } from '@core/register/index.js';
-import { promiseTry } from '../packages/shared/src/promise-try.js';
+import { promiseTry } from '../packages/shared/src/polyfills.js';
 
 describe('Injectorator Full', () => {
   it('Inject should inject dependency into class field', () => {
