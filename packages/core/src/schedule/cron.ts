@@ -5,12 +5,22 @@ import { CronExpressionParser } from 'cron-parser';
 import { _entries, promiseTry, sym } from '@nestify-js/shared';
 import { expectMethodDecorator } from '@core/asserts/decorator-context.js';
 import { metaGet, metaSet } from '@core/register/meta.js';
-import { longTimeout } from './long-timeout.js';
 
 interface CronMeta {
   expression: string;
   uid?: string;
 }
+
+interface JobData {
+  uid?: string;
+  fn: AnyFunction;
+  expression: string;
+  nextTime: number;
+  timer: NodeJS.Timeout | null;
+  running: boolean;
+}
+
+const cronJobs: JobData[] = [];
 
 export function Cron(expression: string, uid?: string): AnyFunction {
   // ! Throws when expression is invalid.
@@ -22,15 +32,20 @@ export function Cron(expression: string, uid?: string): AnyFunction {
   };
 }
 
-interface JobData {
-  uid?: string;
-  fn: AnyFunction;
-  expression: string;
-  nextTime: number;
-  timer: NodeJS.Timeout | null;
-}
+// 2 ** 31 - 1. Maximum delay for setTimeout in Node.js (approximately 24.8 days)
+const MAX_DELAY = 2147483647;
 
-const cronJobs: JobData[] = [];
+export function longTimeout(job: JobData, fn: () => void, delay: number): void {
+  if (delay >= Number.MAX_SAFE_INTEGER) {
+    throw new Error('Delay exceeds the maximum safe integer value.');
+  }
+
+  if (delay < MAX_DELAY) {
+    job.timer = setTimeout(() => longTimeout(job, fn, delay), delay);
+  } else {
+    job.timer = setTimeout(() => longTimeout(job, fn, delay - MAX_DELAY), MAX_DELAY);
+  }
+}
 
 /**
  * Bind cron jobs for a given instance
@@ -42,30 +57,33 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
     return;
   }
 
-  const logErr = (...args: Parameters<typeof app.log.error>) => app.log.error(...args);
+  const err = (...args: Parameters<typeof app.log.error>) => app.log.error(...args);
 
   const entries = _entries(cronMeta);
   for (let i = 0; i < entries.length; i++) {
-    const callback = instance[entries[i][0]];
+    const target = instance[entries[i][0]] as () => void;
     const { expression, uid } = entries[i][1];
 
     const fn = () => {
+      if (!job.running) {
+        return;
+      }
+
       job.nextTime = CronExpressionParser.parse(expression).next().getTime();
       // & Parse every time so delta is always positive.
       // & Sharing the same parsed object might lead to a negative delta.
       const delta = job.nextTime - Date.now();
 
-      job.timer = longTimeout(() => {
-        promiseTry(callback, instance).catch(logErr).finally(fn); // to the next call
-      }, delta);
+      longTimeout(job, () => promiseTry(target, instance).catch(err).finally(fn), delta);
     };
 
     const job: JobData = {
       uid,
       fn,
       expression,
-      nextTime: Infinity,
+      nextTime: -1,
       timer: null,
+      running: true,
     };
 
     cronJobs.push(job);
@@ -96,10 +114,13 @@ export function stopCronJob(uid: string) {
     return;
   }
 
+  job.running = false;
+
   if (job.timer) {
     clearTimeout(job.timer);
+    job.timer = null;
   }
-  job.nextTime = Infinity;
+  job.nextTime = -1;
 }
 
 /**
@@ -110,11 +131,15 @@ export function startCronJob(uid: string) {
     console.warn(`startCronJob called with undefined uid, ignored.`);
     return;
   }
+
   const job = cronJobs.find((j) => j.uid === uid);
-  if (!job) {
+
+  // Non-exist or already running, no need to start again
+  if (!job || job.running) {
     return;
   }
 
+  job.running = true;
   job.fn();
 }
 
@@ -122,11 +147,11 @@ export function startCronJob(uid: string) {
  * Readonly list of all registered cron jobs with their current states.
  */
 export function getCronJobStates() {
-  return cronJobs.map(({ uid, expression, nextTime, timer }) => ({
+  return cronJobs.map(({ uid, expression, nextTime, running }) => ({
     uid,
     expression,
     nextTime,
-    state: timer === null ? 'stopped' : 'running',
+    running,
   }));
 }
 
