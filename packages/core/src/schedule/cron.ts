@@ -45,42 +45,30 @@ export function longTimeout(job: JobData, fn: () => void, delay: number): void {
   }
 }
 
-const _jobs = new WeakMap<NestifyInstance, JobData[]>();
-
-/**
- * Bind cron jobs for a given instance
- * This function is called in lazy injector after all instances are created
- */
-export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constructor>, sourceClass: Constructor) {
-  const cronMeta = metaGet<Record<string, CronMeta>>(sourceClass, [sym.cron]);
-  if (!cronMeta) {
-    app.launchCronJobs ??= _noop;
-    app.startCronJob ??= _noop;
-    app.stopCronJob ??= _noop;
-    app.getCronJobStates ??= () => [];
+function initMethods(app: NestifyInstance, jobs: JobData[]) {
+  // If app's methods are already initialized, skip it.
+  if (typeof app.launchCronJobs === 'function') {
     return;
   }
 
-  const cronJobs: JobData[] = getOrInsertWeak(_jobs, app, []);
-
-  app.launchCronJobs ??= () => {
-    for (let i = 0; i < cronJobs.length; i++) {
-      const job = cronJobs[i];
+  app.launchCronJobs = () => {
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i];
       // ! Won't start the running jobs.
       if (!job.running) {
         job.running = true;
-        cronJobs[i].fn(app);
+        jobs[i].fn(app);
       }
     }
   };
 
-  app.startCronJob ??= (uid: string) => {
+  app.startCronJob = (uid: string) => {
     if (uid === undefined) {
       console.warn(`startCronJob called with undefined uid, ignored.`);
       return;
     }
 
-    const job = cronJobs.find((j) => j.uid === uid);
+    const job = jobs.find((j) => j.uid === uid);
 
     // Non-exist or already running, no need to start again
     if (!job || job.running) {
@@ -91,13 +79,13 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
     job.fn();
   };
 
-  app.stopCronJob ??= (uid: string) => {
+  app.stopCronJob = (uid: string) => {
     if (uid === undefined) {
       console.warn(`stopCronJob called with undefined uid, ignored.`);
       return;
     }
 
-    const job = cronJobs.find((j) => j.uid === uid);
+    const job = jobs.find((j) => j.uid === uid);
     if (!job) {
       return;
     }
@@ -111,14 +99,29 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
     job.nextTime = -1;
   };
 
-  app.getCronJobStates ??= () => {
-    return cronJobs.map(({ uid, expression, nextTime, running }) => ({
+  app.getCronJobStates = () =>
+    jobs.map(({ uid, expression, nextTime, running }) => ({
       uid,
       expression,
       nextTime,
       running,
     }));
-  };
+}
+
+const _jobs = new WeakMap<NestifyInstance, JobData[]>();
+
+/**
+ * Bind cron jobs for a given instance
+ * This function is called in lazy injector after all instances are created
+ */
+export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constructor>, sourceClass: Constructor) {
+  const cronMeta = metaGet<Record<string, CronMeta>>(sourceClass, [sym.cron]);
+  const cronJobs: JobData[] = getOrInsertWeak(_jobs, app, []);
+  initMethods(app, cronJobs);
+
+  if (!cronMeta) {
+    return;
+  }
 
   const err = (...args: Parameters<typeof app.log.error>) => app.log.error(...args);
   const entries = _entries(cronMeta);
