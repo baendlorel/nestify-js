@@ -5,39 +5,69 @@ import { CronExpressionParser } from 'cron-parser';
 import { _entries, promiseTry, sym } from '@nestify-js/shared';
 import { expectMethodDecorator } from '@core/asserts/decorator-context.js';
 import { metaGet, metaSet } from '@core/register/meta.js';
+import { longTimeout } from './long-timeout.js';
 
-export function Cron(expression: string): AnyFunction {
+interface CronMeta {
+  expression: string;
+  uid?: string;
+}
+
+export function Cron(expression: string, uid?: string): AnyFunction {
+  // ! Throws when expression is invalid.
+  CronExpressionParser.parse(expression);
+
   return function (target: AnyFunction, context: ClassMethodDecoratorContext) {
     expectMethodDecorator(target, context);
-    metaSet<string>(context, [sym.cron, context.name], expression);
+    metaSet<CronMeta>(context, [sym.cron, context.name], { expression, uid });
   };
 }
 
-const cronJobs: AnyFunction[] = [];
+interface JobData {
+  uid?: string;
+  fn: AnyFunction;
+  expression: string;
+  nextTime: number;
+  timer: NodeJS.Timeout | null;
+}
+
+const cronJobs: JobData[] = [];
 
 /**
  * Bind cron jobs for a given instance
  * This function is called in lazy injector after all instances are created
  */
 export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constructor>, sourceClass: Constructor) {
-  const cronMeta = metaGet<Record<string, string>>(sourceClass, [sym.cron]);
+  const cronMeta = metaGet<Record<string, CronMeta>>(sourceClass, [sym.cron]);
   if (!cronMeta) {
     return;
   }
 
-  const logErr = app.log.error.bind(app.log);
+  const logErr = (...args: Parameters<typeof app.log.error>) => app.log.error(...args);
 
   const entries = _entries(cronMeta);
   for (let i = 0; i < entries.length; i++) {
-    const fn = instance[entries[i][0]];
-    const expression = entries[i][1];
-    const job = () => {
-      const next = CronExpressionParser.parse(expression).next();
-      const delta = next.getTime() - Date.now();
-      setTimeout(() => {
-        promiseTry(fn, instance).catch(logErr).finally(job); // to the next call
+    const callback = instance[entries[i][0]];
+    const { expression, uid } = entries[i][1];
+
+    const fn = () => {
+      job.nextTime = CronExpressionParser.parse(expression).next().getTime();
+      // & Parse every time so delta is always positive.
+      // & Sharing the same parsed object might lead to a negative delta.
+      const delta = job.nextTime - Date.now();
+
+      job.timer = longTimeout(() => {
+        promiseTry(callback, instance).catch(logErr).finally(fn); // to the next call
       }, delta);
     };
+
+    const job: JobData = {
+      uid,
+      fn,
+      expression,
+      nextTime: Infinity,
+      timer: null,
+    };
+
     cronJobs.push(job);
   }
 }
@@ -48,8 +78,56 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
  */
 export function startCronJobs(app: NestifyInstance) {
   for (let i = 0; i < cronJobs.length; i++) {
-    cronJobs[i](app);
+    cronJobs[i].fn(app);
   }
+}
+
+/**
+ * Stop a specific cron job by its UID.
+ */
+export function stopCronJob(uid: string) {
+  if (uid === undefined) {
+    console.warn(`stopCronJob called with undefined uid, ignored.`);
+    return;
+  }
+
+  const job = cronJobs.find((j) => j.uid === uid);
+  if (!job) {
+    return;
+  }
+
+  if (job.timer) {
+    clearTimeout(job.timer);
+  }
+  job.nextTime = Infinity;
+}
+
+/**
+ * Start a specific cron job by its UID.
+ */
+export function startCronJob(uid: string) {
+  if (uid === undefined) {
+    console.warn(`startCronJob called with undefined uid, ignored.`);
+    return;
+  }
+  const job = cronJobs.find((j) => j.uid === uid);
+  if (!job) {
+    return;
+  }
+
+  job.fn();
+}
+
+/**
+ * Readonly list of all registered cron jobs with their current states.
+ */
+export function getCronJobStates() {
+  return cronJobs.map(({ uid, expression, nextTime, timer }) => ({
+    uid,
+    expression,
+    nextTime,
+    state: timer === null ? 'stopped' : 'running',
+  }));
 }
 
 export namespace CronExpressions {

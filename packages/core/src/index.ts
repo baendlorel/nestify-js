@@ -87,3 +87,6 @@ export type { NestifyHttpPart } from './pipes/basic-transformer.js';
 
 // validation engine
 export { BasicTransformer, basicTransformer } from './pipes/basic-transformer.js';
+
+// Cron jobs
+export { stopCronJob, startCronJob, getCronJobStates, Cron, CronExpressions } from './schedule/cron.js';
