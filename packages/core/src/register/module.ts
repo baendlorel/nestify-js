@@ -5,19 +5,20 @@ import { type Constructor, type SSKey } from '@nestify-js/shared';
 import { toDynamicModule, toModuleClass } from '@core/common/index.js';
 import { tryToGetGlobalToken } from '@core/common/inject-keys.js';
 
-import { collection } from './collection.js';
 import { expectAccessible, expectModule } from './expect-module.js';
-import { injector } from './lazy-injector.js';
 import { metaGetModule } from './meta.js';
 import ph from './provider.js';
 import { registerController } from './route/controller.js';
-
-// TODO 这里要改为函数，不要类了
+import { Collection } from './collection.js';
+import { Injector } from './lazy-injector.js';
 
 export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
-  // # init functions
-
   const moduleStack: Constructor[] = [];
+
+  app.injector = new Injector();
+  app.collection = new Collection();
+
+  // #region init functions
 
   const visit = function (mod: Constructor | DynamicModule, inherited: InheritedModuleMeta = { prefix: [] }): void {
     const moduleClass = toModuleClass(mod);
@@ -53,7 +54,7 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
         continue;
       }
       expectAccessible(providerOptions, m.accessibleProviderTokens);
-      injector.createInstance(providerOptions);
+      app.injector.createInstance(providerOptions);
     }
 
     // register routes
@@ -76,7 +77,7 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
   const collectGlobal = function (mod: Constructor | DynamicModule) {
     const { moduleClass, isGlobal } = toDynamicModule(mod);
     if (isGlobal) {
-      const alreadAdded = collection.addGlobalModule(moduleClass);
+      const alreadAdded = app.collection.addGlobalModule(moduleClass);
       if (alreadAdded) {
         return; // already registered, prevent infinite loop
       }
@@ -93,8 +94,8 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
       const globalToken = tryToGetGlobalToken(providerOptions);
       if (globalToken) {
         // & this will automically detect global tokens and add them
-        collection.addGlobalMiddleware(globalToken);
-        injector.createInstance(providerOptions);
+        app.collection.addGlobalMiddleware(globalToken);
+        app.injector.createInstance(providerOptions);
       }
     }
   };
@@ -107,26 +108,28 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
    */
   const registerBootMiddlewares = function (opts: NestifyOptions) {
     for (let i = 0; i < (opts.registerGlobalMiddlewares ?? []).length; i++) {
-      injector.createInstance(opts.registerGlobalMiddlewares![i]);
+      app.injector.createInstance(opts.registerGlobalMiddlewares![i]);
     }
 
     const registerGlobal = (list: ProviderOptions[] | undefined, push: (token: SSKey) => void) => {
       for (let i = 0; i < (list ?? []).length; i++) {
         const providerOptions = list![i];
-        injector.createInstance(providerOptions);
+        app.injector.createInstance(providerOptions);
         push(ph.getToken(providerOptions));
       }
     };
 
-    registerGlobal(opts.useGlobalGuards, (token) => collection.globalGuards.push(token));
-    registerGlobal(opts.useGlobalInterceptors, (token) => collection.globalInterceptors.push(token));
-    registerGlobal(opts.useGlobalFilters, (token) => collection.globalFilters.push(token));
+    registerGlobal(opts.useGlobalGuards, (token) => app.collection.globalGuards.push(token));
+    registerGlobal(opts.useGlobalInterceptors, (token) => app.collection.globalInterceptors.push(token));
+    registerGlobal(opts.useGlobalFilters, (token) => app.collection.globalFilters.push(token));
     // pipes are stored as PipeOptions
-    registerGlobal(opts.useGlobalPipes, (token) => collection.globalPipes.push({ pipe: token }));
+    registerGlobal(opts.useGlobalPipes, (token) => app.collection.globalPipes.push({ pipe: token }));
   };
 
+  // #endregion
+
   collectGlobal(opts.rootModule);
-  collection.assembleGlobalProviders();
+  app.collection.assembleGlobalProviders();
 
   // prevent fastify to generate default validators
   const existedValidatorCompiler = app.validatorCompiler;
@@ -138,7 +141,7 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
   // register every module recursively
   visit(opts.rootModule);
 
-  injector.apply(app);
+  app.injector.apply(app);
 
   // recover thie existed
   if (existedValidatorCompiler) {

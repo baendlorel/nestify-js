@@ -1,8 +1,7 @@
-import type { FastifyInstance } from 'fastify';
+import type { NestifyInstance } from '@core/types/instance.js';
 import { type Constructor } from '@nestify-js/shared';
 import { _define, _values, sym, toAssigned } from '@nestify-js/shared';
 
-import { injector } from '../lazy-injector.js';
 import {
   metaGetController,
   metaGetFirstMethodPipeSchema,
@@ -32,10 +31,10 @@ function concatRoute(...routes: string[][]): string {
   return '/' + flatRoutes.map((r) => `${r}/`).join('');
 }
 
-export function registerController(app: FastifyInstance, controller: Constructor, modulePrefix: string[]) {
+export function registerController(app: NestifyInstance, controller: Constructor, modulePrefix: string[]) {
   const controllerPrefix = metaGetController(controller).prefix;
   const routes = metaGetRoute(controller);
-  const instance = injector.createInstance(controller);
+  const instance = app.injector.createInstance(controller);
 
   // middlewares
   const getInterceptors = metaGetUseInterceptors(controller);
@@ -54,7 +53,7 @@ export function registerController(app: FastifyInstance, controller: Constructor
     // & Must have same name as before, then metadata can be accessed correctly
     _define(origin, 'name', { value: field, configurable: true });
 
-    const interceptor = createInterceptor(getInterceptors(field));
+    const interceptor = createInterceptor(app, getInterceptors(field));
     const guard = createGuard(getGuards(field));
     const filter = createFilter(getFilters(field));
     const pipe = createPipe(getPipes(field));

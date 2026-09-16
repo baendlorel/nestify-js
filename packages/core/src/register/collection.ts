@@ -7,16 +7,13 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE, APP_LOGGER, sym } fro
 
 import { expect } from '@core/asserts/index.js';
 
-/**
- * Collection of some global metadata
- */
-export namespace collection {
-  export const globalModules = new Set<Constructor>();
-  export const globalProviders = new Set<SSKey>();
-  export const globalInterceptors: SSKey[] = [];
-  export const globalGuards: SSKey[] = [];
-  export const globalFilters: SSKey[] = [];
-  export const globalPipes: PipeOptions[] = [];
+export class Collection {
+  readonly globalModules = new Set<Constructor>();
+  readonly globalProviders = new Set<SSKey>();
+  readonly globalInterceptors: SSKey[] = [];
+  readonly globalGuards: SSKey[] = [];
+  readonly globalFilters: SSKey[] = [];
+  readonly globalPipes: PipeOptions[] = [];
 
   /**
    * Add global middleware with specific token.
@@ -24,24 +21,24 @@ export namespace collection {
    * @param middleware tokens like `APP_FILTER`...
    * @returns
    */
-  export function addGlobalMiddleware(middleware: SSKey) {
+  addGlobalMiddleware(middleware: SSKey) {
     const name = typeof middleware === 'symbol' ? middleware.description : middleware;
     switch (middleware) {
       case APP_FILTER:
-        expect(globalFilters.length === 0, `${name} can only be registered once`);
-        return globalFilters.push(APP_FILTER);
+        expect(this.globalFilters.length === 0, `${name} can only be registered once`);
+        return this.globalFilters.push(APP_FILTER);
       case APP_GUARD:
-        expect(globalGuards.length === 0, `${name} can only be registered once`);
-        return globalGuards.push(APP_GUARD);
+        expect(this.globalGuards.length === 0, `${name} can only be registered once`);
+        return this.globalGuards.push(APP_GUARD);
       case APP_INTERCEPTOR:
-        expect(globalInterceptors.length === 0, `${name} can only be registered once`);
-        return globalInterceptors.push(APP_INTERCEPTOR);
+        expect(this.globalInterceptors.length === 0, `${name} can only be registered once`);
+        return this.globalInterceptors.push(APP_INTERCEPTOR);
       case APP_PIPE:
-        expect(globalPipes.length === 0, `${name} can only be registered once`);
-        return globalPipes.push({ pipe: APP_PIPE });
+        expect(this.globalPipes.length === 0, `${name} can only be registered once`);
+        return this.globalPipes.push({ pipe: APP_PIPE });
       case APP_LOGGER:
-        expect(!globalProviders.has(APP_LOGGER), `${name} can only be registered once`);
-        return globalProviders.add(APP_LOGGER);
+        expect(!this.globalProviders.has(APP_LOGGER), `${name} can only be registered once`);
+        return this.globalProviders.add(APP_LOGGER);
       default:
         break;
     }
@@ -50,24 +47,26 @@ export namespace collection {
   /**
    * @returns whether this module is already added
    */
-  export function addGlobalModule(moduleClass: Constructor): boolean {
-    if (globalModules.has(moduleClass)) {
+  addGlobalModule(moduleClass: Constructor): boolean {
+    if (this.globalModules.has(moduleClass)) {
       return false;
     }
-    globalModules.add(moduleClass);
+    this.globalModules.add(moduleClass);
     return true;
   }
 
-  export function assembleGlobalProviders() {
-    globalModules.forEach((m) => {
+  assembleGlobalProviders() {
+    this.globalModules.forEach((m) => {
       const moduleMetadata = ReflectDeep.get(m, [sym.metadata, sym.root, sym.module]) as ModuleMeta;
-      moduleMetadata.exports.forEach((exported) => globalProviders.add(exported.name));
+      moduleMetadata.exports.forEach((exported) => this.globalProviders.add(exported.name));
     });
-    [...globalFilters, ...globalGuards, ...globalInterceptors].forEach((token) => globalProviders.add(token));
+    [...this.globalFilters, ...this.globalGuards, ...this.globalInterceptors].forEach((token) =>
+      this.globalProviders.add(token),
+    );
 
     // Always has the APP_LOGGER
     // Default value is fastifyInstance.log
-    globalProviders.add(APP_LOGGER);
+    this.globalProviders.add(APP_LOGGER);
   }
 
   /**
@@ -76,12 +75,12 @@ export namespace collection {
    * - globalModules
    * - metadata(exclude sym.Custom) of Nestify Classes
    */
-  export function clear() {
-    globalProviders.clear();
-    globalModules.clear();
-    globalInterceptors.length = 0;
-    globalGuards.length = 0;
-    globalFilters.length = 0;
-    globalPipes.length = 0;
+  clear() {
+    this.globalProviders.clear();
+    this.globalModules.clear();
+    this.globalInterceptors.length = 0;
+    this.globalGuards.length = 0;
+    this.globalFilters.length = 0;
+    this.globalPipes.length = 0;
   }
 }

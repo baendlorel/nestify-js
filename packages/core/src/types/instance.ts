@@ -1,6 +1,18 @@
-import { FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
+import type { Collection } from '@core/register/collection.js';
+import type { Injector } from '@core/register/lazy-injector.js';
 
 export interface NestifyInstance extends FastifyInstance {
+  /**
+   * @internal
+   */
+  injector: Injector;
+
+  /**
+   * @internal
+   */
+  collection: Collection;
+
   /**
    * Start all registered cron jobs
    * This function is called after all modules are initialized and the application is ready
