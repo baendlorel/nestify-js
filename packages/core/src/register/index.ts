@@ -30,6 +30,9 @@ function normalize(opts: Partial<NestifyOptions>): NestifyOptions {
   return normalized;
 }
 
+/**
+ * Register every module of `rootModule` on an already-created instance.
+ */
 export async function apply(app: NestifyInstance, partialOpts: Partial<NestifyOptions>): Promise<void> {
   const opts = normalize(partialOpts);
 

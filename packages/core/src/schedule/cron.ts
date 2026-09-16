@@ -20,6 +20,14 @@ interface JobData {
   running: boolean;
 }
 
+interface CronStore {
+  jobs: JobData[];
+  /**
+   * Targets already bound for one application.
+   */
+  boundTargets: WeakSet<AnyFunction>;
+}
+
 export function Cron(expression: string, uid?: string): AnyFunction {
   // ! Throws when expression is invalid.
   CronExpressionParser.parse(expression);
@@ -45,11 +53,13 @@ function longTimeout(job: JobData, fn: () => void, delay: number): void {
   }
 }
 
-function initMethods(app: NestifyInstance, jobs: JobData[]) {
+function initMethods(app: NestifyInstance, store: CronStore) {
   // If app's methods are already initialized, skip it.
   if (typeof app.launchCronJobs === 'function') {
     return;
   }
+
+  const jobs = store.jobs;
 
   app.launchCronJobs = () => {
     for (let i = 0; i < jobs.length; i++) {
@@ -118,12 +128,12 @@ function initMethods(app: NestifyInstance, jobs: JobData[]) {
       job.nextTime = -1;
     }
     jobs.length = 0;
-    _jobs.delete(app);
+    _stores.delete(app);
     done();
   });
 }
 
-const _jobs = new WeakMap<NestifyInstance, JobData[]>();
+const _stores = new WeakMap<NestifyInstance, CronStore>();
 
 /**
  * Bind cron jobs for a given instance
@@ -131,8 +141,11 @@ const _jobs = new WeakMap<NestifyInstance, JobData[]>();
  */
 export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constructor>, sourceClass: Constructor) {
   const cronMeta = metaGet<Record<string, CronMeta>>(sourceClass, [sym.cron]);
-  const cronJobs: JobData[] = getOrInsertWeak(_jobs, app, []);
-  initMethods(app, cronJobs);
+  const store = getOrInsertWeak<NestifyInstance, CronStore>(_stores, app, {
+    jobs: [],
+    boundTargets: new WeakSet(),
+  });
+  initMethods(app, store);
 
   if (!cronMeta) {
     return;
@@ -142,6 +155,13 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
   const entries = _entries(cronMeta);
   for (let i = 0; i < entries.length; i++) {
     const target = instance[entries[i][0]] as () => void;
+
+    // ! The same instance can be registered under several tokens, bind each method once
+    if (store.boundTargets.has(target)) {
+      continue;
+    }
+    store.boundTargets.add(target);
+
     const { expression, uid } = entries[i][1];
 
     const fn = () => {
@@ -166,7 +186,7 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
       running: false,
     };
 
-    cronJobs.push(job);
+    store.jobs.push(job);
   }
 }
 

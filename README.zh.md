@@ -497,11 +497,15 @@ const app = await nestify(AppModule, {
 
 ```typescript
 import fastify from 'fastify';
-import { apply } from 'nestify-js';
+import { apply, type NestifyInstance } from 'nestify-js';
 
-const app = fastify({ logger: true });
+// apply() 要求传入 NestifyInstance，因为注册模块时会在实例上安装 cron 方法
+const app = fastify({ logger: true }) as NestifyInstance;
 
 await apply(app, { rootModule: AppModule });
+
+// apply() 之后即可使用
+app.getCronJobStates();
 await app.listen({ port: 3000 });
 ```
 

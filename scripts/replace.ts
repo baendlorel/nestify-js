@@ -1,7 +1,7 @@
 import replace from '@rollup/plugin-replace';
 import pkg from '../package.json' with { type: 'json' };
 
-export const replacePlugin = () =>
+export const replacePlugin = (): ReturnType<typeof replace.default> =>
   (replace as unknown as typeof replace.default)({
     preventAssignment: true,
     delimiters: ['', ''],

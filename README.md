@@ -500,11 +500,16 @@ If you need more control over the fastify instance (custom plugins, hooks, decor
 
 ```typescript
 import fastify from 'fastify';
-import { apply } from 'nestify-js';
+import { apply, type NestifyInstance } from 'nestify-js';
 
-const app = fastify({ logger: true });
+// `apply()` requires a `NestifyInstance`, because it installs the cron methods
+// on it while registering modules
+const app = fastify({ logger: true }) as NestifyInstance;
 
 await apply(app, { rootModule: AppModule });
+
+// available after apply()
+app.getCronJobStates();
 await app.listen({ port: 3000 });
 ```
 

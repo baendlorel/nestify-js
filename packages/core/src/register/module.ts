@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { NestifyInstance } from '@core/types/instance.js';
 import type { NestifyOptions, DynamicModule, InheritedModuleMeta, ProviderOptions } from '@core/types/injection.js';
 import { type Constructor, type SSKey } from '@nestify-js/shared';
 
@@ -12,9 +12,10 @@ import { metaGetModule } from './meta.js';
 import ph from './provider.js';
 import { registerController } from './route/controller.js';
 
+// TODO 这里要改为函数，不要类了
 class ModuleRegister {
   private readonly moduleStack: Constructor[] = [];
-  private app!: FastifyInstance;
+  private app!: NestifyInstance;
   private opts!: NestifyOptions;
 
   /**
@@ -126,10 +127,10 @@ class ModuleRegister {
 
   /**
    * Collect global modules(for accessibleProviders), then register recursively.
-   * @param app fastify instance
+   * @param app nestify instance (fastify instance enriched with cron methods)
    * @param rootModule the main module
    */
-  apply(app: FastifyInstance, opts: NestifyOptions) {
+  apply(app: NestifyInstance, opts: NestifyOptions) {
     this.app = app;
     this.opts = opts;
 
