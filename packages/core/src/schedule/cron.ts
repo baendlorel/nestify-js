@@ -1,5 +1,5 @@
 import type { AnyFunction, Constructor } from '@core/types/primitives.js';
-import type { NestifyInstance } from '@core/index.js';
+import type { NestifyInstance } from '@core/types/instance.js';
 
 import { CronExpressionParser } from 'cron-parser';
 import { _entries, promiseTry, sym } from '@nestify-js/shared';
@@ -19,8 +19,6 @@ interface JobData {
   timer: NodeJS.Timeout | null;
   running: boolean;
 }
-
-const cronJobs: JobData[] = [];
 
 export function Cron(expression: string, uid?: string): AnyFunction {
   // ! Throws when expression is invalid.
@@ -42,8 +40,6 @@ export function longTimeout(job: JobData, fn: () => void, delay: number): void {
 
   if (delay < MAX_DELAY) {
     job.timer = setTimeout(fn, delay);
-  } else if (delay === MAX_DELAY) {
-    job.timer = setTimeout(() => (job.timer = setTimeout(fn, MAX_DELAY - 1000)), 1000);
   } else {
     job.timer = setTimeout(() => longTimeout(job, fn, delay - MAX_DELAY), MAX_DELAY);
   }
@@ -59,8 +55,66 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
     return;
   }
 
-  const err = (...args: Parameters<typeof app.log.error>) => app.log.error(...args);
+  const cronJobs: JobData[] = [];
 
+  app.launchCronJobs = () => {
+    for (let i = 0; i < cronJobs.length; i++) {
+      const job = cronJobs[i];
+      // ! Won't start the running jobs.
+      if (!job.running) {
+        job.running = true;
+        cronJobs[i].fn(app);
+      }
+    }
+  };
+
+  app.startCronJob = (uid: string) => {
+    if (uid === undefined) {
+      console.warn(`startCronJob called with undefined uid, ignored.`);
+      return;
+    }
+
+    const job = cronJobs.find((j) => j.uid === uid);
+
+    // Non-exist or already running, no need to start again
+    if (!job || job.running) {
+      return;
+    }
+
+    job.running = true;
+    job.fn();
+  };
+
+  app.stopCronJob = (uid: string) => {
+    if (uid === undefined) {
+      console.warn(`stopCronJob called with undefined uid, ignored.`);
+      return;
+    }
+
+    const job = cronJobs.find((j) => j.uid === uid);
+    if (!job) {
+      return;
+    }
+
+    job.running = false;
+
+    if (job.timer) {
+      clearTimeout(job.timer);
+      job.timer = null;
+    }
+    job.nextTime = -1;
+  };
+
+  app.getCronJobStates = function getCronJobStates() {
+    return cronJobs.map(({ uid, expression, nextTime, running }) => ({
+      uid,
+      expression,
+      nextTime,
+      running,
+    }));
+  };
+
+  const err = (...args: Parameters<typeof app.log.error>) => app.log.error(...args);
   const entries = _entries(cronMeta);
   for (let i = 0; i < entries.length; i++) {
     const target = instance[entries[i][0]] as () => void;
@@ -90,71 +144,6 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
 
     cronJobs.push(job);
   }
-}
-
-/**
- * Start all registered cron jobs
- * This function is called after all modules are initialized and the application is ready
- */
-export function startCronJobs(app: NestifyInstance) {
-  for (let i = 0; i < cronJobs.length; i++) {
-    cronJobs[i].fn(app);
-  }
-}
-
-/**
- * Stop a specific cron job by its UID.
- */
-export function stopCronJob(uid: string) {
-  if (uid === undefined) {
-    console.warn(`stopCronJob called with undefined uid, ignored.`);
-    return;
-  }
-
-  const job = cronJobs.find((j) => j.uid === uid);
-  if (!job) {
-    return;
-  }
-
-  job.running = false;
-
-  if (job.timer) {
-    clearTimeout(job.timer);
-    job.timer = null;
-  }
-  job.nextTime = -1;
-}
-
-/**
- * Start a specific cron job by its UID.
- */
-export function startCronJob(uid: string) {
-  if (uid === undefined) {
-    console.warn(`startCronJob called with undefined uid, ignored.`);
-    return;
-  }
-
-  const job = cronJobs.find((j) => j.uid === uid);
-
-  // Non-exist or already running, no need to start again
-  if (!job || job.running) {
-    return;
-  }
-
-  job.running = true;
-  job.fn();
-}
-
-/**
- * Readonly list of all registered cron jobs with their current states.
- */
-export function getCronJobStates() {
-  return cronJobs.map(({ uid, expression, nextTime, running }) => ({
-    uid,
-    expression,
-    nextTime,
-    running,
-  }));
 }
 
 export namespace CronExpressions {
