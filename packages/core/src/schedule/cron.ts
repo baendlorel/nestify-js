@@ -33,7 +33,7 @@ export function Cron(expression: string, uid?: string): AnyFunction {
 // 2 ** 31 - 1. Maximum delay for setTimeout in Node.js (approximately 24.8 days)
 const MAX_DELAY = 2147483647;
 
-export function longTimeout(job: JobData, fn: () => void, delay: number): void {
+function longTimeout(job: JobData, fn: () => void, delay: number): void {
   if (delay >= Number.MAX_SAFE_INTEGER) {
     throw new Error('Delay exceeds the maximum safe integer value.');
   }
