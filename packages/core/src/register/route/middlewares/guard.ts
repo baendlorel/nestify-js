@@ -1,17 +1,17 @@
 import { createSerialTaskAsync, TaskifyAsync } from 'serial-task';
 import type { GuardTask, NestifyGuardLike } from '@core/types/middleware.js';
-import { InjectToken } from '@core/types/injection.js';
+import type { InjectToken } from '@core/types/injection.js';
+import type { NestifyInstance } from '@core/types/instance.js';
 
 import { ForbiddenException } from '@core/exceptions/index.js';
-import { injector } from '@core/register/lazy-injector.js';
 import { ExecutionContext } from '@core/common/execution-context.js';
 
 /**
  * Create a preValidation hook for the route
  */
-export function createGuard(tokens: InjectToken[]): TaskifyAsync<GuardTask> {
+export function createGuard(app: NestifyInstance, tokens: InjectToken[]): TaskifyAsync<GuardTask> {
   const task = createSerialTaskAsync<GuardTask>({
-    tasks: injector.getMiddlewareHooks<NestifyGuardLike>(tokens, 'canActivate'),
+    tasks: app.injector.getMiddlewareHooks<NestifyGuardLike>(tokens, 'canActivate'),
     resultWrapper: (_task, _i, _tasks, args) => args,
     breakCondition: (_task, _i, _tasks, _args, lastReturn) => lastReturn === false,
     skipCondition: () => false,

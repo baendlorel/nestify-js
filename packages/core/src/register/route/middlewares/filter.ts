@@ -1,9 +1,9 @@
 import type { InjectToken } from '@core/types/injection.js';
 import type { FilterTask, NestifyFilterLike } from '@core/types/middleware.js';
+import type { NestifyInstance } from '@core/types/instance.js';
 
 import { createSerialTaskAsync, TaskifyAsync } from 'serial-task';
 import { expectArray, expectClass } from '@core/asserts/index.js';
-import { injector } from '@core/register/lazy-injector.js';
 import { metaGetFilters } from '@core/register/meta.js';
 import { HttpException } from '@core/exceptions/index.js';
 
@@ -31,9 +31,9 @@ const defaultFilter: TaskifyAsync<FilterTask> = async (context, exception) => {
   };
 };
 
-export function createFilter(tokens: InjectToken[]): TaskifyAsync<FilterTask> {
+export function createFilter(app: NestifyInstance, tokens: InjectToken[]): TaskifyAsync<FilterTask> {
   const catches = tokens.map((token) => {
-    const { cls } = injector.getDetail<NestifyFilterLike>(token);
+    const { cls } = app.injector.getDetail<NestifyFilterLike>(token);
     expectClass(cls, `Filter token '${String(token)}' must refer to a class, but got ${String(cls)}`);
 
     const exceptionClasses = metaGetFilters(cls) ?? [];
@@ -48,7 +48,7 @@ export function createFilter(tokens: InjectToken[]): TaskifyAsync<FilterTask> {
   }
 
   return createSerialTaskAsync<FilterTask>({
-    tasks: injector.getMiddlewareHooks<NestifyFilterLike>(tokens, 'catch'),
+    tasks: app.injector.getMiddlewareHooks<NestifyFilterLike>(tokens, 'catch'),
     resultWrapper: (_task, _i, _tasks, args) => args,
     breakCondition: () => false,
     skipCondition: (_task, i, _tasks, args) => catches[i].some((cls) => args[1] instanceof cls),

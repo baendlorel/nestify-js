@@ -37,10 +37,10 @@ export function registerController(app: NestifyInstance, controller: Constructor
   const instance = app.injector.createInstance(controller);
 
   // middlewares
-  const getInterceptors = metaGetUseInterceptors(controller);
-  const getGuards = metaGetUseGuards(controller);
-  const getFilters = metaGetUseFilters(controller);
-  const getPipes = metaGetUsePipes(controller);
+  const getInterceptors = metaGetUseInterceptors(app, controller);
+  const getGuards = metaGetUseGuards(app, controller);
+  const getFilters = metaGetUseFilters(app, controller);
+  const getPipes = metaGetUsePipes(app, controller);
 
   _values(routes).forEach((routeConfig) => {
     const { field, method, route } = routeConfig[sym.route.base];
@@ -54,9 +54,9 @@ export function registerController(app: NestifyInstance, controller: Constructor
     _define(origin, 'name', { value: field, configurable: true });
 
     const interceptor = createInterceptor(app, getInterceptors(field));
-    const guard = createGuard(getGuards(field));
-    const filter = createFilter(getFilters(field));
-    const pipe = createPipe(getPipes(field));
+    const guard = createGuard(app, getGuards(field));
+    const filter = createFilter(app, getFilters(field));
+    const pipe = createPipe(app, getPipes(field));
     const firstMethodPipeSchema = metaGetFirstMethodPipeSchema(controller, field);
     opts.schema = toAssigned(opts.schema, ApiSchema, firstMethodPipeSchema); // Here schema is for swagger
 

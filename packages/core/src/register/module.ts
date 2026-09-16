@@ -53,14 +53,14 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
       if (tryToGetGlobalToken(providerOptions)) {
         continue;
       }
-      expectAccessible(providerOptions, m.accessibleProviderTokens);
+      expectAccessible(providerOptions, m.getAccessibleProviderTokens(app));
       app.injector.createInstance(providerOptions);
     }
 
     // register routes
     for (let i = 0; i < m.controllers.length; i++) {
       const controller = m.controllers[i];
-      expectAccessible(controller, m.accessibleProviderTokens);
+      expectAccessible(controller, m.getAccessibleProviderTokens(app));
       registerController(app, controller, fullPrefix);
     }
 

@@ -1,5 +1,6 @@
 import type { ModuleMeta, DynamicModule } from '@core/types/injection.js';
-import { type Constructor } from '@nestify-js/shared';
+import type { Constructor } from '@nestify-js/shared';
+import type { NestifyInstance } from '@core/types/instance.js';
 
 import { ReflectDeep } from 'reflect-deep';
 import { sym } from '@nestify-js/shared';
@@ -47,7 +48,9 @@ export function toModule(outerProvider: Constructor, opt?: Partial<ToModuleOptio
     providers: [injectable],
     controllers: [],
     exports: [injectable],
-    accessibleProviderTokens: [],
+    getAccessibleProviderTokens(app: NestifyInstance) {
+      return [...app.collection.globalProviders];
+    },
     prefix: '',
     outer: true,
   });

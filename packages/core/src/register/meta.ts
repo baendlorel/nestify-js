@@ -23,8 +23,8 @@ import type {
 import { ReflectDeep } from 'reflect-deep';
 import { concatArr, sym } from '@nestify-js/shared';
 import { splitPath, toModuleClass } from '@core/common/utils.js';
-import { collection } from './collection.js';
 import ph from './provider.js';
+import { NestifyInstance } from '@core/types/instance.js';
 
 /**
  * ! Methods here should be used **AFTER** validation of parameters
@@ -136,12 +136,13 @@ export function metaGetProvider(cls: Constructor): ProviderMeta {
 export function metaSetModule(context: ClassDecoratorContext, options: Partial<ModuleMeta>): boolean {
   const { controllers = [], providers = [], imports = [], exports = [], outer = false, prefix = '' } = options;
 
+  // TODO 这里metasetmodule需要有app实例，让它能注册到globalProviders
   return metaSet<ModuleMeta>(context, [sym.module], {
     controllers: [...new Set(controllers)],
     providers: [...new Set(providers)],
     imports: [...new Set(imports)],
     exports: [...new Set(exports)],
-    get accessibleProviderTokens() {
+    getAccessibleProviderTokens(app: NestifyInstance) {
       const imported: SSKey[] = imports
         .map((m: Constructor | DynamicModule) => {
           const moduleClass = toModuleClass(m);
@@ -149,7 +150,7 @@ export function metaSetModule(context: ClassDecoratorContext, options: Partial<M
         })
         .flat();
       const providerTokens: SSKey[] = providers.map((p: ProviderOptions) => ph.getToken(p));
-      return [...providerTokens, ...imported, ...collection.globalProviders];
+      return [...providerTokens, ...imported, ...app.collection.globalProviders];
     },
     outer,
     prefix,
@@ -211,11 +212,11 @@ export function metaSetUseInterceptors(
   return metaSet(context, [sym.interceptor.handler, context.name], tokens);
 }
 
-export function metaGetUseInterceptors(cls: Constructor): InterceptorGetter {
+export function metaGetUseInterceptors(app: NestifyInstance, cls: Constructor): InterceptorGetter {
   const controller = metaGet<InjectToken[]>(cls, [sym.interceptor.controller]);
   const handler = metaGet<Record<SSKey, InjectToken[]>>(cls, [sym.interceptor.handler]) ?? {};
   return function (field: SSKey) {
-    return concatArr(collection.globalInterceptors, controller, handler[field]);
+    return concatArr(app.collection.globalInterceptors, controller, handler[field]);
   };
 }
 
@@ -229,11 +230,11 @@ export function metaSetUseGuards(
   return metaSet(context, [sym.guard.handler, context.name], tokens);
 }
 
-export function metaGetUseGuards(cls: Constructor): GuardGetter {
+export function metaGetUseGuards(app: NestifyInstance, cls: Constructor): GuardGetter {
   const controller = metaGet<InjectToken[]>(cls, [sym.guard.controller]);
   const handler = metaGet<Record<SSKey, InjectToken[]>>(cls, [sym.guard.handler]) ?? {};
   return function (field: SSKey) {
-    return concatArr(collection.globalGuards, controller, handler[field]);
+    return concatArr(app.collection.globalGuards, controller, handler[field]);
   };
 }
 
@@ -247,11 +248,11 @@ export function metaSetUseFilters(
   return metaSet(context, [sym.filter.handler, context.name], tokens);
 }
 
-export function metaGetUseFilters(cls: Constructor): FilterGetter {
+export function metaGetUseFilters(app: NestifyInstance, cls: Constructor): FilterGetter {
   const controller = metaGet<InjectToken[]>(cls, [sym.filter.controller]);
   const handler = metaGet<Record<SSKey, InjectToken[]>>(cls, [sym.filter.handler]) ?? {};
   return function (field: SSKey) {
-    return concatArr(collection.globalFilters, controller, handler[field]);
+    return concatArr(app.collection.globalFilters, controller, handler[field]);
   };
 }
 
@@ -265,11 +266,11 @@ export function metaSetUsePipes(
   return metaSet(context, [sym.pipe.handler, context.name], pipes);
 }
 
-export function metaGetUsePipes(cls: Constructor): PipeGetter {
+export function metaGetUsePipes(app: NestifyInstance, cls: Constructor): PipeGetter {
   const controller = metaGet<PipeOptions[]>(cls, [sym.pipe.controller]);
   const handler = metaGet<Record<SSKey, PipeOptions[]>>(cls, [sym.pipe.handler]) ?? {};
   return function (field: SSKey) {
-    return concatArr(collection.globalPipes, controller, handler[field]);
+    return concatArr(app.collection.globalPipes, controller, handler[field]);
   };
 }
 

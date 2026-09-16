@@ -3,6 +3,7 @@ import type { HttpStatus } from '@nestify-js/shared';
 import type { AnyFunction, Constructor, SSKey } from '@core/types/primitives.js';
 
 import type { FastifyRequest as NestifyRequest } from 'fastify';
+import type { NestifyInstance } from '../../dist/index.mjs';
 
 export interface BaseHttpException {
   readonly message: string;
@@ -213,9 +214,12 @@ export interface ModuleMeta {
    */
   readonly prefix: string;
 
-  get accessibleProviderTokens(): SSKey[];
-
   readonly outer: boolean;
+
+  /**
+   * `app` is used to append global providers to the accessible provider tokens list.
+   */
+  getAccessibleProviderTokens(app: NestifyInstance): SSKey[];
 }
 
 export interface InheritedModuleMeta {
