@@ -41,7 +41,7 @@ export async function apply(app: NestifyInstance, partialOpts: Partial<NestifyOp
   console.log(`Modules are all registered`);
 
   // Start cron jobs after all modules are initialized
-  startCronJobs();
+  startCronJobs(app);
 }
 
 export { nestify } from './nestify.js';

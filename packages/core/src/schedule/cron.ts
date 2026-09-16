@@ -1,7 +1,8 @@
 import type { AnyFunction, Constructor } from '@core/types/primitives.js';
-import { CronExpressionParser } from 'cron-parser';
-import { _entries, sym } from '@nestify-js/shared';
+import type { NestifyInstance } from '@core/index.js';
 
+import { CronExpressionParser } from 'cron-parser';
+import { _entries, promiseTry, sym } from '@nestify-js/shared';
 import { expectMethodDecorator } from '@core/asserts/decorator-context.js';
 import { metaGet, metaSet } from '@core/register/meta.js';
 
@@ -26,14 +27,13 @@ export function bindCronJob(instance: InstanceType<Constructor>, sourceClass: Co
 
   const entries = _entries(cronMeta);
   for (let i = 0; i < entries.length; i++) {
-    const methodName = entries[i][0];
+    const fn = instance[entries[i][0]];
     const expression = entries[i][1];
     const job = () => {
       const next = CronExpressionParser.parse(expression).next();
       const delta = next.getTime() - Date.now();
       setTimeout(() => {
-        instance[methodName]();
-        job(); // to the next call
+        promiseTry(fn, instance).catch(console.error).finally(job); // to the next call
       }, delta);
     };
     cronJobs.push(job);
@@ -44,7 +44,7 @@ export function bindCronJob(instance: InstanceType<Constructor>, sourceClass: Co
  * Start all registered cron jobs
  * This function is called after all modules are initialized and the application is ready
  */
-export function startCronJobs() {
+export function startCronJobs(app: NestifyInstance) {
   for (let i = 0; i < cronJobs.length; i++) {
     cronJobs[i]();
   }
