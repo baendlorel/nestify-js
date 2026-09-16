@@ -19,11 +19,13 @@ const cronJobs: AnyFunction[] = [];
  * Bind cron jobs for a given instance
  * This function is called in lazy injector after all instances are created
  */
-export function bindCronJob(instance: InstanceType<Constructor>, sourceClass: Constructor) {
+export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constructor>, sourceClass: Constructor) {
   const cronMeta = metaGet<Record<string, string>>(sourceClass, [sym.cron]);
   if (!cronMeta) {
     return;
   }
+
+  const logErr = app.log.error.bind(app.log);
 
   const entries = _entries(cronMeta);
   for (let i = 0; i < entries.length; i++) {
@@ -33,7 +35,7 @@ export function bindCronJob(instance: InstanceType<Constructor>, sourceClass: Co
       const next = CronExpressionParser.parse(expression).next();
       const delta = next.getTime() - Date.now();
       setTimeout(() => {
-        promiseTry(fn, instance).catch(console.error).finally(job); // to the next call
+        promiseTry(fn, instance).catch(logErr).finally(job); // to the next call
       }, delta);
     };
     cronJobs.push(job);
@@ -46,7 +48,7 @@ export function bindCronJob(instance: InstanceType<Constructor>, sourceClass: Co
  */
 export function startCronJobs(app: NestifyInstance) {
   for (let i = 0; i < cronJobs.length; i++) {
-    cronJobs[i]();
+    cronJobs[i](app);
   }
 }
 

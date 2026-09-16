@@ -1,8 +1,8 @@
 import type { LazyInjectEntry, ProviderOptions, InjectToken, DynamicModule } from '@core/types/injection.js';
 import type { NestifyMiddleware } from '@core/types/middleware.js';
 import type { AnyFunction, Constructor, SSKey } from '@core/types/primitives.js';
+import type { NestifyInstance } from '@core/index.js';
 
-import { FastifyInstance } from 'fastify';
 import {
   _construct,
   _getPrototypeOf,
@@ -130,7 +130,7 @@ export namespace injector {
    * 2. Assign injected fields as `injectList` recorded
    * 3. Bind cron jobs for all instances
    */
-  export function apply(app: FastifyInstance) {
+  export function apply(app: NestifyInstance) {
     const map = instanceMap;
     // & Give default APP_LOGGER
     if (!map.has(APP_LOGGER)) {
@@ -159,7 +159,7 @@ export namespace injector {
       if (_isObject(instance)) {
         const cls = _getPrototypeOf(instance)?.constructor as Constructor | undefined;
         if (cls) {
-          bindCronJob(instance, cls);
+          bindCronJob(app, instance, cls);
         }
       }
     }
