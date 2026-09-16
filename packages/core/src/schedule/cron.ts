@@ -41,7 +41,9 @@ export function longTimeout(job: JobData, fn: () => void, delay: number): void {
   }
 
   if (delay < MAX_DELAY) {
-    job.timer = setTimeout(() => longTimeout(job, fn, delay), delay);
+    job.timer = setTimeout(fn, delay);
+  } else if (delay === MAX_DELAY) {
+    job.timer = setTimeout(() => (job.timer = setTimeout(fn, MAX_DELAY - 1000)), 1000);
   } else {
     job.timer = setTimeout(() => longTimeout(job, fn, delay - MAX_DELAY), MAX_DELAY);
   }
