@@ -13,55 +13,24 @@ import ph from './provider.js';
 import { registerController } from './route/controller.js';
 
 // TODO 这里要改为函数，不要类了
-class ModuleRegister {
-  private readonly moduleStack: Constructor[] = [];
-  private app!: NestifyInstance;
-  private opts!: NestifyOptions;
 
-  /**
-   * Collect every global things into `collection`
-   * - modules
-   * - global provider tokens from 'inject-keys.ts'
-   * @param mod
-   */
-  collectGlobal(mod: Constructor | DynamicModule) {
-    const { moduleClass, isGlobal } = toDynamicModule(mod);
-    if (isGlobal) {
-      const alreadAdded = collection.addGlobalModule(moduleClass);
-      if (alreadAdded) {
-        return; // already registered, prevent infinite loop
-      }
-    }
+export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
+  // # init functions
 
-    const m = metaGetModule(moduleClass);
-    for (let i = 0; i < m.imports.length; i++) {
-      this.collectGlobal(m.imports[i]);
-    }
+  const moduleStack: Constructor[] = [];
 
-    // & if global token is detected, add them to collection
-    for (let i = 0; i < m.providers.length; i++) {
-      const providerOptions = m.providers[i];
-      const globalToken = tryToGetGlobalToken(providerOptions);
-      if (globalToken) {
-        // & this will automically detect global tokens and add them
-        collection.addGlobalMiddleware(globalToken);
-        injector.createInstance(providerOptions);
-      }
-    }
-  }
-
-  visit(mod: Constructor | DynamicModule, inherited: InheritedModuleMeta = { prefix: [] }): void {
+  const visit = function (mod: Constructor | DynamicModule, inherited: InheritedModuleMeta = { prefix: [] }): void {
     const moduleClass = toModuleClass(mod);
 
-    if (this.moduleStack.includes(moduleClass)) {
-      const chain = this.moduleStack.map((m) => m.name).join(' -> ') + ` -> ${moduleClass.name}`;
-      if (this.opts.allowCrossModuleCircularReference) {
+    if (moduleStack.includes(moduleClass)) {
+      const chain = moduleStack.map((m) => m.name).join(' -> ') + ` -> ${moduleClass.name}`;
+      if (opts.allowCrossModuleCircularReference) {
         // if allowed, return directly since it is definitely registered before
         return;
       }
       _throw(`Circular dependency detected: ${chain}`);
     } else {
-      this.moduleStack.push(moduleClass);
+      moduleStack.push(moduleClass);
     }
 
     expectModule(moduleClass);
@@ -74,7 +43,7 @@ class ModuleRegister {
     // imports modules recursively
     // modules are no needed to be instantiated, we only cares about their metadata
     for (let i = 0; i < m.imports.length; i++) {
-      this.visit(m.imports[i], { prefix: fullPrefix });
+      visit(m.imports[i], { prefix: fullPrefix });
     }
 
     // & AccessibleProviders are from imported modules and itself
@@ -91,12 +60,44 @@ class ModuleRegister {
     for (let i = 0; i < m.controllers.length; i++) {
       const controller = m.controllers[i];
       expectAccessible(controller, m.accessibleProviderTokens);
-      registerController(this.app, controller, fullPrefix);
+      registerController(app, controller, fullPrefix);
     }
 
     // pop the module from stack after processing
-    this.moduleStack.pop();
-  }
+    moduleStack.pop();
+  };
+
+  /**
+   * Collect every global things into `collection`
+   * - modules
+   * - global provider tokens from 'inject-keys.ts'
+   * @param mod
+   */
+  const collectGlobal = function (mod: Constructor | DynamicModule) {
+    const { moduleClass, isGlobal } = toDynamicModule(mod);
+    if (isGlobal) {
+      const alreadAdded = collection.addGlobalModule(moduleClass);
+      if (alreadAdded) {
+        return; // already registered, prevent infinite loop
+      }
+    }
+
+    const m = metaGetModule(moduleClass);
+    for (let i = 0; i < m.imports.length; i++) {
+      collectGlobal(m.imports[i]);
+    }
+
+    // & if global token is detected, add them to collection
+    for (let i = 0; i < m.providers.length; i++) {
+      const providerOptions = m.providers[i];
+      const globalToken = tryToGetGlobalToken(providerOptions);
+      if (globalToken) {
+        // & this will automically detect global tokens and add them
+        collection.addGlobalMiddleware(globalToken);
+        injector.createInstance(providerOptions);
+      }
+    }
+  };
 
   /**
    * Create instances of middlewares passed via boot options.
@@ -104,8 +105,7 @@ class ModuleRegister {
    * - `useGlobalXXX`: applied globally after `registerGlobalMiddlewares`,
    *   in their own array order
    */
-  registerBootMiddlewares() {
-    const opts = this.opts;
+  const registerBootMiddlewares = function (opts: NestifyOptions) {
     for (let i = 0; i < (opts.registerGlobalMiddlewares ?? []).length; i++) {
       injector.createInstance(opts.registerGlobalMiddlewares![i]);
     }
@@ -123,37 +123,25 @@ class ModuleRegister {
     registerGlobal(opts.useGlobalFilters, (token) => collection.globalFilters.push(token));
     // pipes are stored as PipeOptions
     registerGlobal(opts.useGlobalPipes, (token) => collection.globalPipes.push({ pipe: token }));
-  }
+  };
 
-  /**
-   * Collect global modules(for accessibleProviders), then register recursively.
-   * @param app nestify instance (fastify instance enriched with cron methods)
-   * @param rootModule the main module
-   */
-  apply(app: NestifyInstance, opts: NestifyOptions) {
-    this.app = app;
-    this.opts = opts;
+  collectGlobal(opts.rootModule);
+  collection.assembleGlobalProviders();
 
-    this.collectGlobal(this.opts.rootModule);
-    collection.assembleGlobalProviders();
+  // prevent fastify to generate default validators
+  const existedValidatorCompiler = app.validatorCompiler;
+  app.setValidatorCompiler(() => () => true);
 
-    // prevent fastify to generate default validators
-    const existedValidatorCompiler = app.validatorCompiler;
-    app.setValidatorCompiler(() => () => true);
+  // & Create instances of boot middlewares (registerGlobalMiddlewares + useGlobalXXX)
+  registerBootMiddlewares(opts);
 
-    // & Create instances of boot middlewares (registerGlobalMiddlewares + useGlobalXXX)
-    this.registerBootMiddlewares();
+  // register every module recursively
+  visit(opts.rootModule);
 
-    // register every module recursively
-    this.visit(this.opts.rootModule);
-    injector.apply(this.app);
+  injector.apply(app);
 
-    // recover thie existed
-    if (existedValidatorCompiler) {
-      app.setValidatorCompiler(existedValidatorCompiler);
-    }
+  // recover thie existed
+  if (existedValidatorCompiler) {
+    app.setValidatorCompiler(existedValidatorCompiler);
   }
 }
-
-const moduleRegister = new ModuleRegister();
-export default moduleRegister;

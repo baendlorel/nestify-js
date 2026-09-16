@@ -4,7 +4,7 @@ import { NestifyOptions } from '@core/types/injection.js';
 import { BuiltinMiddlewares } from '@core/setup.js';
 
 import { clearExpectCache, expectModule } from './expect-module.js';
-import moduleRegister from './module.js';
+import { registerModule } from './module.js';
 
 function clear() {
   clearExpectCache();
@@ -36,7 +36,7 @@ function normalize(opts: Partial<NestifyOptions>): NestifyOptions {
 export async function apply(app: NestifyInstance, partialOpts: Partial<NestifyOptions>): Promise<void> {
   const opts = normalize(partialOpts);
 
-  moduleRegister.apply(app, opts);
+  registerModule(app, opts);
 
   clear();
 
