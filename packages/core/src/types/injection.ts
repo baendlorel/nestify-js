@@ -3,7 +3,7 @@ import type { HttpStatus } from '@nestify-js/shared';
 import type { AnyFunction, Constructor, SSKey } from '@core/types/primitives.js';
 
 import type { FastifyRequest as NestifyRequest } from 'fastify';
-import type { NestifyInstance } from '../../dist/index.mjs';
+import type { NestifyInstance } from '@core/types/instance.js';
 
 export interface BaseHttpException {
   readonly message: string;

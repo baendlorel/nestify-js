@@ -21,7 +21,7 @@ export default defineConfig({
     neverBundle: ['cron-parser', /^fastify/, /^@fastify/, /^@nestify\//],
   },
   tsconfig: join(root, 'tsconfig.build.json'),
-  dts: true,
+  dts: { compilerOptions: { stripInternal: true } },
   sourcemap: false,
   alias: {
     '@core/': join(root, 'packages', 'core', 'src'),
