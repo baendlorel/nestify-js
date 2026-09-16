@@ -2,7 +2,7 @@ import type { AnyFunction, Constructor } from '@core/types/primitives.js';
 import type { NestifyInstance } from '@core/types/instance.js';
 
 import { CronExpressionParser } from 'cron-parser';
-import { _entries, _noop, getOrInsertWeak, promiseTry, sym } from '@nestify-js/shared';
+import { _entries, getOrInsertWeak, promiseTry, sym } from '@nestify-js/shared';
 import { expectMethodDecorator } from '@core/asserts/decorator-context.js';
 import { metaGet, metaSet } from '@core/register/meta.js';
 
@@ -57,7 +57,7 @@ function initMethods(app: NestifyInstance, jobs: JobData[]) {
       // ! Won't start the running jobs.
       if (!job.running) {
         job.running = true;
-        jobs[i].fn(app);
+        job.fn();
       }
     }
   };
@@ -106,6 +106,21 @@ function initMethods(app: NestifyInstance, jobs: JobData[]) {
       nextTime,
       running,
     }));
+
+  app.addHook('onClose', (_app, done) => {
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i];
+      job.running = false;
+      if (job.timer) {
+        clearTimeout(job.timer);
+        job.timer = null;
+      }
+      job.nextTime = -1;
+    }
+    jobs.length = 0;
+    _jobs.delete(app);
+    done();
+  });
 }
 
 const _jobs = new WeakMap<NestifyInstance, JobData[]>();

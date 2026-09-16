@@ -51,11 +51,9 @@ export type {
 
 export type { NestifyOptions } from '@core/types/index.js';
 
-export type {
-  FastifyRequest as NestifyRequest,
-  FastifyReply as NestifyReply,
-  FastifyInstance as NestifyInstance,
-} from 'fastify';
+export type { FastifyRequest as NestifyRequest, FastifyReply as NestifyReply } from 'fastify';
+
+export type { NestifyInstance } from '@core/types/instance.js';
 
 // export common exceptions for use
 export * from './exceptions/index.js';
@@ -89,4 +87,4 @@ export type { NestifyHttpPart } from './pipes/basic-transformer.js';
 export { BasicTransformer, basicTransformer } from './pipes/basic-transformer.js';
 
 // Cron jobs
-export { stopCronJob, startCronJob, getCronJobStates, Cron, CronExpressions } from './schedule/cron.js';
+export { Cron, CronExpressions } from './schedule/cron.js';

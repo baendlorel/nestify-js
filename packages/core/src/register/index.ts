@@ -1,6 +1,5 @@
-import { type FastifyInstance as NestifyInstance } from 'fastify';
+import type { NestifyInstance } from '@core/types/instance.js';
 import { NestifyOptions } from '@core/types/injection.js';
-import { startCronJobs } from '@core/schedule/cron.js';
 
 import { BuiltinMiddlewares } from '@core/setup.js';
 
@@ -41,7 +40,7 @@ export async function apply(app: NestifyInstance, partialOpts: Partial<NestifyOp
   console.log(`Modules are all registered`);
 
   // Start cron jobs after all modules are initialized
-  startCronJobs(app);
+  app.launchCronJobs();
 }
 
 export { nestify } from './nestify.js';

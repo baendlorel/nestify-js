@@ -1,7 +1,7 @@
 import type { LazyInjectEntry, ProviderOptions, InjectToken, DynamicModule } from '@core/types/injection.js';
 import type { NestifyMiddleware } from '@core/types/middleware.js';
 import type { AnyFunction, Constructor, SSKey } from '@core/types/primitives.js';
-import type { NestifyInstance } from '@core/index.js';
+import type { NestifyInstance } from '@core/types/instance.js';
 
 import {
   _construct,

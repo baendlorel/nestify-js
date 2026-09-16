@@ -5,10 +5,10 @@ import fastify, {
   type FastifyPluginAsync,
   type FastifyPluginOptions,
   type FastifyListenOptions,
-  type FastifyInstance as NestifyInstance,
 } from 'fastify';
 import type { Constructor } from '@nestify-js/shared';
 import type { NestifyOptions } from '@core/types/injection.js';
+import type { NestifyInstance } from '@core/types/instance.js';
 
 import { apply } from './index.js';
 
@@ -87,7 +87,7 @@ export async function nestify(rootModule: Constructor, opts: NestifyBootOptions 
       ...routerOptions,
       ignoreTrailingSlash,
     },
-  });
+  }) as unknown as NestifyInstance;
 
   for (const [plugin, options] of plugins ?? []) {
     await app.register(plugin, options);
