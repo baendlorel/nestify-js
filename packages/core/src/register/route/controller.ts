@@ -31,7 +31,18 @@ function concatRoute(...routes: string[][]): string {
   return '/' + flatRoutes.map((r) => `${r}/`).join('');
 }
 
+const registeredControllers = new WeakMap<NestifyInstance, Set<Constructor>>();
+
 export function registerController(app: NestifyInstance, controller: Constructor, modulePrefix: string[]) {
+  if (!registeredControllers.has(app)) {
+    registeredControllers.set(app, new Set());
+  }
+  const registered = registeredControllers.get(app)!;
+  if (registered.has(controller)) {
+    return;
+  }
+  registered.add(controller);
+
   const controllerPrefix = metaGetController(controller).prefix;
   const routes = metaGetRoute(controller);
   const instance = app.injector.createInstance(controller);
