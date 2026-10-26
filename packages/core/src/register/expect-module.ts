@@ -139,6 +139,8 @@ export function expectModule(target: unknown): asserts target is Constructor {
   if (moduleCache.has(target)) {
     return;
   }
+  // & mark before recursing so circular imports do not overflow the stack
+  moduleCache.add(target);
 
   expectClass(target, `Should be a module class, got: ${inspect(target)}`);
   const mm = metaGetModule(target);
@@ -169,7 +171,6 @@ export function expectModule(target: unknown): asserts target is Constructor {
       expectModule(moduleClass);
     });
   }
-  moduleCache.add(target);
 }
 
 /**

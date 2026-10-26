@@ -74,18 +74,20 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
    * - global provider tokens from 'inject-keys.ts'
    * @param mod
    */
-  const collectGlobal = function (mod: Constructor | DynamicModule) {
+  const collectGlobal = function (mod: Constructor | DynamicModule, visited = new Set<Constructor>()) {
     const { moduleClass, isGlobal } = toDynamicModule(mod);
     if (isGlobal) {
-      const alreadAdded = app.collection.addGlobalModule(moduleClass);
-      if (alreadAdded) {
-        return; // already registered, prevent infinite loop
-      }
+      app.collection.addGlobalModule(moduleClass);
     }
+
+    if (visited.has(moduleClass)) {
+      return;
+    }
+    visited.add(moduleClass);
 
     const m = metaGetModule(moduleClass);
     for (let i = 0; i < m.imports.length; i++) {
-      collectGlobal(m.imports[i]);
+      collectGlobal(m.imports[i], visited);
     }
 
     // & if global token is detected, add them to collection
