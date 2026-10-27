@@ -133,10 +133,7 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
   collectGlobal(opts.rootModule);
   app.collection.assembleGlobalProviders();
 
-  // prevent fastify to generate default validators
-  const existedValidatorCompiler = app.validatorCompiler;
-  app.setValidatorCompiler(() => () => true);
-
+  // FIXED 不再用恒成功的编译器覆盖应用配置：否则默认 schema 校验及后续 Fastify 路由都会失效。
   // & Create instances of boot middlewares (registerGlobalMiddlewares + useGlobalXXX)
   registerBootMiddlewares(opts);
 
@@ -144,9 +141,4 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
   visit(opts.rootModule);
 
   app.injector.apply(app);
-
-  // recover thie existed
-  if (existedValidatorCompiler) {
-    app.setValidatorCompiler(existedValidatorCompiler);
-  }
 }

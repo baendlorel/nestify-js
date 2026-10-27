@@ -17,7 +17,6 @@ import type {
   FilterGetter,
   PipeOptions,
   PipeGetter,
-  PipeFullSchema,
 } from '@core/types/middleware.js';
 
 import { ReflectDeep } from 'reflect-deep';
@@ -277,12 +276,8 @@ export function metaGetUsePipes(app: NestifyInstance, cls: Constructor): PipeGet
 /**
  * Fisrt method pipe is used to set schema for swagger
  */
-export function metaGetFirstMethodPipeSchema(cls: Constructor, field: SSKey): PipeFullSchema | undefined {
+export function metaGetFirstMethodPipe(cls: Constructor, field: SSKey): PipeOptions | undefined {
   const methodPipes = metaGet<PipeOptions[]>(cls, [sym.pipe.handler, field]);
-  if (!methodPipes) {
-    // length > 0 is already assured by @UsePipes
-    return undefined;
-  }
-  return methodPipes[0].schema;
+  return methodPipes?.[0];
 }
 // #endregion

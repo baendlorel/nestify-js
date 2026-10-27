@@ -47,10 +47,22 @@ export function createFilter(app: NestifyInstance, tokens: InjectToken[]): Taski
     return defaultFilter;
   }
 
-  return createSerialTaskAsync<FilterTask>({
+  const task = createSerialTaskAsync<FilterTask>({
     tasks: app.injector.getMiddlewareHooks<NestifyFilterLike>(tokens, 'catch'),
     resultWrapper: (_task, _i, _tasks, args) => args,
-    breakCondition: () => false,
-    skipCondition: (_task, i, _tasks, args) => catches[i].some((cls) => args[1] instanceof cls),
+    // FIXED 已发送响应后停止，避免后续过滤器重复发送。
+    breakCondition: (_task, _i, _tasks, [cx]) => cx.switchToHttp().getReply().sent,
+    // FIXED 只跳过不匹配的异常类型；未指定类型的过滤器捕获所有异常。
+    skipCondition: (_task, i, _tasks, args) =>
+      catches[i].length > 0 && !catches[i].some((cls) => args[1] instanceof cls),
   });
+
+  return async (cx, exception) => {
+    const result = await task(cx, exception);
+    // FIXED 没有过滤器发送响应时使用默认处理，防止未匹配或未处理的异常导致请求悬挂。
+    if (!cx.switchToHttp().getReply().sent) {
+      return defaultFilter(cx, exception);
+    }
+    return result;
+  };
 }
