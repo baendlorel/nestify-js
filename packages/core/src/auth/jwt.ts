@@ -24,12 +24,12 @@ export class JwtService {
   }
 
   // # privates
-  private secret: string;
+  private secret: string | null;
   private signOptions: JwtSignOptions;
   private verifyOptions: JwtVerifyOptions;
 
   constructor(options?: JwtModuleOptions) {
-    this.secret = options?.secret || 'nestify-js-jwt-secret';
+    this.secret = options?.secret || null;
     this.signOptions = this.validateSignOptions(options?.signOptions ?? {});
     this.verifyOptions = options?.verifyOptions ?? {};
   }
@@ -73,7 +73,10 @@ export class JwtService {
   /**
    * Create HMAC signature using Node.js crypto
    */
-  private createSignature(data: string, secret: string): string {
+  private createSignature(data: string, secret: string | null): string {
+    if (secret === null) {
+      throw new Error('[Nestify] Secret is not set');
+    }
     const hmac = createHmac('sha256', secret);
     hmac.update(data);
     return this.base64UrlEncode(hmac.digest().toString('binary'));

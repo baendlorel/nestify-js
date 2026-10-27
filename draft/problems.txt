@@ -1,0 +1,158 @@
+packages/core 问题清单
+
+范围：packages/core/src，结合现有 core 测试及必要的 shared 辅助实现。
+以下严重程度是按默认行为可能造成的影响粗略排序，不代表正式安全审计结论。
+“复现”表示已用临时测试验证当前行为；“代码确认”表示直接由实现和公开接口确认。
+
+高
+==
+
+1. JWT 使用公开、固定的默认密钥
+位置：packages/core/src/auth/jwt.ts:31、packages/core/src/auth/jwt.ts:240
+代码确认：未传 secret 时使用固定字符串，导出的 jwt 单例和默认 JwtGuard 也使用它。
+若应用未显式配置密钥，任何了解该默认值的人都可以生成能通过该服务校验的令牌。
+建议：要求调用方配置非空密钥，生产环境不要使用固定默认值。
+--已解决，请你更新readme
+
+2. 默认请求 schema 校验被关闭，且影响后续 Fastify 路由
+位置：packages/core/src/register/module.ts:136、packages/core/src/pipes/basic-transformer.ts:17
+复现：没有自定义 validatorCompiler 时，@Body 声明 required 字段仍接受空对象；apply 后另行注册的普通 Fastify 路由同样接受非法请求。
+原因：注册时安装恒返回 true 的编译器，原编译器不存在时不会恢复；内置 pipe 随后也使用这一编译器。请求验证可能被静默绕过。
+建议：隔离文档 schema 和实际校验，保留 Fastify 默认验证器，并在失败路径恢复原配置。
+--帮我修
+
+3. 不同应用共享第一个请求使用的验证编译器
+位置：packages/core/src/pipes/basic-transformer.ts:14、packages/core/src/pipes/basic-transformer.ts:109
+复现：同一个 transformer 先接收编译器 A，再接收编译器 B，第二次仍使用 A 的结果。内置 pipe 使用进程级单例，且即使当前无 schema 也会缓存编译器。
+影响：多个应用或不同编译配置互相污染，可能使用另一个应用的校验规则或恒成功的编译器。
+建议：按应用/编译器隔离缓存，并把实际编译器及必要的路由上下文纳入缓存键。
+--帮我修
+
+4. 超过大小限制的上传文件被静默截断并当作成功处理
+位置：packages/core/src/multipart/uploaded-file.ts:30、packages/core/src/multipart/pipes/file.pipe.ts:48
+复现：@File({ limits: { fileSize: 3 } }) 上传 6 字节，处理器收到 3 字节并返回 200。多文件路径也使用相同的自定义 toBuffer。
+原因：包装类直接读取流，不检查流的 truncated 标志，也没有使用 multipart 自带的限制错误处理。
+建议：在流结束后检查截断并返回明确的大小限制错误，不能把不完整文件当作有效上传。
+--帮我修
+
+5. 异常过滤器的匹配条件反了，且没有可靠的默认兜底
+位置：packages/core/src/register/route/middlewares/filter.ts:46、packages/core/src/register/route/middlewares/filter.ts:54
+复现：抛出 BadRequestException 时，@Filter(BadRequestException) 被跳过，@Filter(TypeError) 却执行。
+没有指定异常类的 @Filter() 因空数组永不跳过而碰巧捕获所有错误；只要配置了过滤器就不再启用默认过滤器，且串行执行不会在处理后停止。
+影响：错误由不相干的处理器处理，或没有处理器发送响应；多个处理器还可能重复发送。
+建议：按匹配条件执行，明确处理完成后的终止与未匹配时的默认回退。
+--帮我修
+
+6. JWT 的 HS256 签名不是标准 JWT 签名
+位置：packages/core/src/auth/jwt.ts:57、packages/core/src/auth/jwt.ts:76
+复现：将输出与 Node createHmac('sha256', secret).update(signingInput).digest('base64url') 对比，签名不一致。
+原因：摘要先转换为 binary 字符串，再按 UTF-8 重新编码；本服务签发和校验虽然彼此一致，但通常无法与标准 JWT 实现互通。
+建议：直接对摘要字节做 base64url 编码，并用标准实现的双向测试向量验证。
+
+7. JWT 声明的算法与实际签名算法不一致，验证时也不校验 header
+位置：packages/core/src/types/auth.ts:38、packages/core/src/auth/jwt.ts:76、packages/core/src/auth/jwt.ts:102、packages/core/src/auth/jwt.ts:166
+代码确认：类型允许 HS384、HS512 和 RS 系列；签发只改变 header.alg，实际始终使用 HMAC-SHA256；verify 不解析或限制 header.alg。
+影响：令牌算法声明失真，无法实现调用方预期的算法策略和标准互操作。这里不假定可直接绕过现有签名校验。
+建议：仅暴露实际支持的算法，验证 header 和允许的算法，或使用成熟 JWT 库。
+
+8. JWT 过期时间边界及类型校验不正确
+位置：packages/core/src/auth/jwt.ts:181
+复现：expiresIn 为 1 秒时，恰到 exp 秒的令牌仍被接受。代码同时用真值判断 exp，因此 exp=0 不会检查；也没有验证 exp 是有限数字。
+影响：过期或无效的时间声明可能被接受。
+建议：严格校验声明类型，在 now >= exp + tolerance 时拒绝，并覆盖边界和无效值。
+
+9. DI 以类名代替类身份，导致不同类发生 token 冲突
+位置：packages/core/src/register/lazy-injector.ts:34、packages/core/src/register/provider.ts:30、packages/core/src/register/provider.ts:76
+复现：两个不同的 class Service 同时注册时，第二个类的查找返回第一个类的实例。
+影响：跨模块、第三方库或构建压缩产生同名类时，注入错误实例，甚至引发错误的权限或业务行为。
+建议：类 token 使用构造函数身份；字符串和 symbol token 保持独立。
+
+10. 模块隔离可以被 Symbol 字段和 useExisting 绕过
+位置：packages/core/src/register/expect-module.ts:198、packages/core/src/register/lazy-injector.ts:113、packages/core/src/register/lazy-injector.ts:137
+复现：未导出、未导入的兄弟模块 provider，既可通过 Symbol 名字段 @Inject 注入，也可通过 useExisting 别名访问。
+原因：依赖检查使用 Object.values，漏掉 Symbol 属性；useExisting 不参与依赖可访问性检查，而实例 map 是应用级共享。
+建议：遍历所有自有键，并对别名目标执行同样的模块可访问性验证。
+
+11. factory 依赖按声明顺序取值，缺失时静默传入 undefined
+位置：packages/core/src/register/module.ts:46、packages/core/src/register/lazy-injector.ts:107、packages/core/src/register/lazy-injector.ts:129
+复现：providers 中 factory 排在其注入的类之前时，factory 收到 undefined；注入默认 APP_LOGGER 的 factory 也收到 undefined，因为默认 logger 在之后的 apply 阶段才加入。
+此外，factory 即使拿到类实例，该实例的字段注入也尚未完成。
+建议：按依赖图初始化 factory，确保依赖及字段注入就绪，对缺失和循环依赖明确报错。
+
+中
+==
+
+12. 默认异常处理把内部错误作为 400 并暴露原始消息
+位置：packages/core/src/register/route/middlewares/filter.ts:16
+复现：控制器抛出普通 Error 时响应状态为 400，body 包含原始 error.message。
+影响：服务端故障被误报为客户端错误，内部实现或敏感信息可能返回给客户端。
+建议：未知异常记录服务端日志，返回不泄露细节的 500；保留显式 HttpException 的语义。
+
+13. JwtGuard 对缺失或无效令牌返回 400 而不是 401
+位置：packages/core/src/auth/jwt.guard.ts:47、packages/core/src/auth/jwt.guard.ts:59
+复现：受保护路由不传 Authorization 返回 400。验证时的 UnauthorizedException 也被重新包装成普通 Error。
+建议：抛出或保留 UnauthorizedException，不要把身份验证失败降级为普通错误。
+
+14. 异步 factory 注入的是 Promise 而不是其结果
+位置：packages/core/src/register/lazy-injector.ts:107
+复现：useFactory: async () => 'ready' 后，依赖字段收到 Promise。
+类型允许 factory 返回任意值，但初始化过程不会等待它。若异步 factory 不在设计范围内，至少应明确拒绝或文档化，避免静默注入错误类型。
+
+15. useExisting 无法引用基本类型的 useValue
+位置：packages/core/src/register/lazy-injector.ts:113
+复现：{ provide: 'value', useValue: 1 } 再加 { provide: 'alias', useExisting: 'value' }，启动时报找不到 provider。
+原因：只接受对象实例，而 useValue 允许任意值；createInstance 的去重也只识别对象值。
+建议：使用 Map.has 判断是否存在，保留 false、0、字符串、null 和 undefined 等已注册值。
+
+16. 拦截器 catch 无法捕获控制器或 pipe 抛出的异常
+位置：packages/core/src/register/route/handler.ts:30、packages/core/src/decorators/middlewares/interceptor.ts:26
+复现：拦截器注册 next.catch 后，控制器抛错，catch 回调没有执行，直接进入 filter。
+当前 catch 仅覆盖该拦截器自身 map/tap 回调中的异常，不能覆盖其包装的下游处理流程。
+建议：明确并实现拦截器对下游错误的传播和恢复语义。
+
+17. 叠加多个同级中间件装饰器会相互覆盖
+位置：packages/core/src/register/meta.ts:214、packages/core/src/register/meta.ts:278、packages/core/src/decorators/middlewares/pipe.ts:70
+复现：同一 handler 叠加两个 @UsePipes，只有最外层的 pipe 执行。其他 UseGuards/UseFilters/UseInterceptors 同样直接覆盖元数据。
+@Body、@File 等也通过 UsePipes 写入同一位置，和另一个方法级 pipe 装饰器组合时可能被覆盖。
+建议：合并同级声明并明确执行顺序；覆盖情况需有文档和测试。
+
+18. Cron 按函数身份去重，误丢弃不同实例上的相同方法
+位置：packages/core/src/schedule/cron.ts:143、packages/core/src/schedule/cron.ts:157
+复现：为同一类的两个实例调用 bindCronJob 后，仅注册一个任务，因为实例共享原型方法函数。
+建议：以实例和方法的组合去重，只折叠同一实例的重复别名。
+
+19. Cron 执行过程中停止再启动会产生重复计时器
+位置：packages/core/src/schedule/cron.ts:75、packages/core/src/schedule/cron.ts:92、packages/core/src/schedule/cron.ts:167
+复现：任务仍在 await 时 stop、start，再让原任务完成；下一秒处理函数执行两次。
+原因：restart 已安排新计时器，而旧执行的 finally 又看到 running=true 并再次安排。
+建议：使用执行代次或取消标记，保证旧执行不能为新一轮任务重新调度。
+
+20. 同一 controller 通过不同模块前缀导入时只注册第一条路径
+位置：packages/core/src/register/route/controller.ts:34、packages/core/src/register/module.ts:44
+复现：Child 模块分别位于 first 和 second 前缀下时，/first/item 可访问，/second/item 返回 404。
+原因：去重只使用 controller 类，不包含继承的模块前缀。
+建议：明确同一 controller 的多前缀语义，并按有效路由或 controller+前缀去重。
+
+21. toModule 的构造参数被丢弃
+位置：packages/core/src/decorators/module.ts:39、packages/core/src/decorators/injectable.ts:17
+复现：toModule(External, { args: ['expected'] }) 创建的 External 实例收到 undefined。
+原因：toInjectable 接收 args，但调用 metaSetProviderOnClass 时没有传入。
+建议：将参数写入 provider 元数据，并测试实例构造。
+
+22. expectArray 忽略元素检查函数返回的错误
+位置：packages/core/src/asserts/expect.ts:70、packages/core/src/register/expect-module.ts:160
+复现：expectArray([1], 'bad', () => 'invalid') 不抛错。
+影响：调用方依赖返回字符串报告错误的检查失效，例如模块 exports 是否属于 providers 的检查不会生效。
+建议：统一谓词的返回契约并处理错误结果，或把调用方全部改为显式抛错。
+
+23. HttpMethod 没有返回装饰器工厂
+位置：packages/core/src/decorators/router/http-methods.ts:21
+复现：HttpMethod('HEAD') 返回 undefined，因此不能通过公开接口声明自定义 HTTP 方法。
+建议：返回 registerRoute(method.toUpperCase())，并测试装饰器注册结果。
+
+验证记录
+========
+- pnpm exec vitest run packages/core/tests --exclude packages/core/tests/review-probe.test.ts：现有 core 测试 7 个文件、43 项通过。
+- 临时针对性复现：21 项通过；测试文件已删除。复现测试对源码运行时缺少构建宏的 _throw 提供了本地测试替身，不代表已修复该环境问题。
+- 额外尝试包含根目录 tests 和 packages/nestify/tests 的测试：部分套件因根目录无法解析 fastify、源码运行时 _throw 未定义或旧测试引用已不存在的 injector 而失败；因此不能宣称完整集成测试通过。
+- 本清单不修改框架实现，未对所有输入组合或生产部署配置作穷举。
