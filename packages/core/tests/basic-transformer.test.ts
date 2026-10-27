@@ -1,15 +1,17 @@
 import { describe, it, expect } from 'vitest';
 
-import { BasicTransformer, PipeBody, PipeParams, PipeQuery, ExecutionContext, BadRequestException } from '@nestify-js/core';
+import {
+  BasicTransformer,
+  PipeBody,
+  PipeParams,
+  PipeQuery,
+  ExecutionContext,
+  BadRequestException,
+} from '@nestify-js/core';
 
 /** Create a mock ExecutionContext for HTTP requests */
 function createMockContext(request: Record<string, any>, reply: any = undefined) {
-  return new ExecutionContext(
-    [request, reply] as any,
-    'http',
-    class {} as any,
-    (() => {}) as any,
-  );
+  return new ExecutionContext([request, reply] as any, 'http', class {} as any, (() => {}) as any);
 }
 
 /** Create a fresh BasicTransformer transformer for each test (avoids singleton state leakage) */
@@ -119,6 +121,27 @@ describe('basicTransformer', () => {
       // No schema → validator is not called
       const result = await createTransformer()(ctx, 'body');
       expect(result).toEqual([{ name: 'test' }, undefined]);
+    });
+
+    it('uses the current request compiler even after a schema-less call', async () => {
+      const transformer = createTransformer();
+      const schema = { body: { type: 'object' } };
+      const request = (value: string) => ({
+        body: {},
+        server: { validatorCompiler: () => () => ({ value }) },
+      });
+
+      await transformer(createMockContext(request('unused')), 'body');
+      expect((await transformer(createMockContext(request('first')), 'body', schema))[0]).toBe('first');
+      expect((await transformer(createMockContext(request('second')), 'body', schema))[0]).toBe('second');
+    });
+
+    it('rejects a validator result containing an error array', async () => {
+      const req = {
+        body: {},
+        server: { validatorCompiler: () => () => ({ error: [{ message: 'invalid' }] }) },
+      };
+      await expect(createTransformer()(createMockContext(req), 'body', { body: {} })).rejects.toThrow(/invalid/);
     });
   });
 

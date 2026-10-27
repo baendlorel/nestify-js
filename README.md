@@ -246,6 +246,8 @@ class ApiController {
 
 Pipes validate and transform input data; each pipe's return value becomes the next pipe's `input`. Validation is based on Fastify's `validatorCompiler`.
 
+Fastify uses its default JSON Schema compiler unless a custom compiler is configured before modules are applied. Validation errors are passed to Nestify filters after guards and interceptors run. For built-in method pipes, a custom compiler runs in the pipe so transformed values are preserved. With `@Opt({ attachValidation: true })`, the handler can inspect `request.validationError` instead.
+
 ```typescript
 @Pipe()
 class TrimPipe extends NestifyPipe {
@@ -306,6 +308,8 @@ class UserController {
 
 Filters handle exceptions thrown by routes. Specify the exception classes to catch in the decorator (omit to catch all):
 
+Filters run in global → controller → method order. Nonmatching filters are skipped; once a filter sends a reply, later filters do not run. If none sends a reply, the default filter handles the exception.
+
 ```typescript
 @Filter(HttpException)
 class HttpExceptionFilter extends NestifyFilter {
@@ -353,12 +357,17 @@ class AppModule {}
 
 ### Built-in JWT Guard
 
+Configure a nonempty secret before using the default `jwt` service or `JwtGuard()`; no default signing secret is provided.
+
 `JwtGuard` ships auto-registered (no need to add it to providers). It verifies the token from `Authorization: Bearer <token>` and attaches the decoded payload to the request:
 
 ```typescript
-import { JwtGuard, JwtService, jwt } from 'nestify-js';
+import { JwtGuard, jwt } from 'nestify-js';
 
-// `jwt` is the default JwtService instance; pass your own via JwtGuard(myJwt)
+const secret = process.env.JWT_SECRET;
+if (!secret) throw new Error('JWT_SECRET is required');
+jwt.configure({ secret });
+
 @Controller('protected')
 @UseGuards(JwtGuard())
 class ProtectedController {
@@ -368,6 +377,10 @@ class ProtectedController {
   }
 }
 ```
+
+## File uploads
+
+`@File` and `@Files` buffer uploaded files before invoking the handler to detect size-limit violations; an oversized file receives a 413 response. The exposed `file` stream reads from the buffered content, so account for the configured limits when sizing memory.
 
 ## Cron Jobs
 

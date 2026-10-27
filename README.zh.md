@@ -242,6 +242,8 @@ class ApiController {
 
 管道负责校验和转换输入数据；每个管道的返回值会成为下一个管道的 `input`。校验基于 Fastify 的 `validatorCompiler`。
 
+未配置自定义编译器时，Fastify 使用默认的 JSON Schema 编译器；自定义编译器应在应用模块之前配置。校验错误会在守卫和拦截器执行后交给 Nestify 过滤器。内置方法级管道的自定义编译器在管道中执行，以保留转换后的值。使用 `@Opt({ attachValidation: true })` 时，处理方法可以自行读取 `request.validationError`。
+
 ```typescript
 @Pipe()
 class TrimPipe extends NestifyPipe {
@@ -302,6 +304,8 @@ class UserController {
 
 过滤器处理路由抛出的异常。在装饰器中指定要捕获的异常类（省略则捕获全部）：
 
+过滤器按全局 → 控制器 → 方法的顺序执行，不匹配的过滤器会被跳过；一旦过滤器发送响应，就不再执行后续过滤器。如果没有过滤器发送响应，将由默认过滤器处理。
+
 ```typescript
 @Filter(HttpException)
 class HttpExceptionFilter extends NestifyFilter {
@@ -349,12 +353,17 @@ class AppModule {}
 
 ### 内置 JWT 守卫
 
+使用默认 `jwt` 服务或 `JwtGuard()` 前请配置非空密钥，框架不再提供默认签名密钥。
+
 框架自带 `JwtGuard`（已自动注册，无需加入 providers）。它会校验 `Authorization: Bearer <token>` 中的 token，并把解码后的 payload 挂到请求上：
 
 ```typescript
-import { JwtGuard, JwtService, jwt } from 'nestify-js';
+import { JwtGuard, jwt } from 'nestify-js';
 
-// `jwt` 是默认的 JwtService 实例；也可以传入自己的：JwtGuard(myJwt)
+const secret = process.env.JWT_SECRET;
+if (!secret) throw new Error('JWT_SECRET is required');
+jwt.configure({ secret });
+
 @Controller('protected')
 @UseGuards(JwtGuard())
 class ProtectedController {
@@ -364,6 +373,10 @@ class ProtectedController {
   }
 }
 ```
+
+## 文件上传
+
+`@File` 和 `@Files` 会在调用处理方法前将上传文件读入内存，以检测大小限制；文件超限时返回 413。提供的 `file` 流从缓冲内容读取，请根据配置的限制评估内存占用。
 
 ## 定时任务（Cron）
 
