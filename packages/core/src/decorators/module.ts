@@ -27,20 +27,20 @@ export function Module(options: Partial<ModuleMeta>) {
 }
 
 interface ToModuleOptions {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  args: any[];
   isGlobal: boolean;
 }
 
 /**
  * Make outer provider an importable Nestify module
+ * - The provider is created without arguments, wrap a configured instance in a
+ *   factory provider when constructor arguments are needed
  * @param outerProvider
  */
 export function toModule(outerProvider: Constructor, opt?: Partial<ToModuleOptions>): DynamicModule {
-  const { isGlobal = false, args = [] } = Object(opt) as ToModuleOptions;
+  const { isGlobal = false } = Object(opt) as ToModuleOptions;
   expectClassNotDecorated(outerProvider, sym.provider);
 
-  const injectable = toInjectable(outerProvider, args);
+  const injectable = toInjectable(outerProvider);
   // & Directly set everything in a temp class, not via `meta.setXXX`
   const temp = createNamedClass(`${outerProvider.name}Module`);
   ReflectDeep.set<ModuleMeta>(temp, [sym.metadata, sym.root, sym.module], {

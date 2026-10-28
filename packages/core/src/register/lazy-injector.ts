@@ -9,7 +9,7 @@ import { toModuleClass } from '@core/common/index.js';
 import { expectFunction, expectObject, expect, isThenable } from '@core/asserts/index.js';
 import { bindCronJob } from '@core/schedule/cron.js';
 
-import { metaGetInject, metaGetModule, metaGetProvider } from './meta.js';
+import { metaGetInject, metaGetModule } from './meta.js';
 import ph from './provider.js';
 
 export class Injector {
@@ -68,8 +68,8 @@ export class Injector {
    *   - This list will be used by `apply` after all instances are created
    */
   createInstanceByClass(token: InjectToken, cls: Constructor) {
-    const { args } = metaGetProvider(cls);
-    const instance = _construct(cls, args);
+    // FIXED 取消构造参数支持：provider 一律无参构造，需要预置参数时请使用 factory provider。
+    const instance = _construct(cls, []);
     this.instanceMap.set(token, instance);
 
     const injects = metaGetInject(cls);

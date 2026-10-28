@@ -19,5 +19,5 @@ export const Patch = registerRoute('PATCH');
 export const Put = registerRoute('PUT');
 export const Delete = registerRoute('DELETE');
 export const HttpMethod = function (method: string) {
-  registerRoute(method.toUpperCase());
+  return registerRoute(method.toUpperCase());
 };

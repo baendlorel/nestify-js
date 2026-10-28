@@ -54,7 +54,7 @@ function metaPush<T>(context: DecoratorContext, keys: SSKey[], values: T[]): boo
 }
 
 export function metaSetController(context: ClassDecoratorContext, prefix?: string): boolean {
-  const data: ProviderMeta = { args: [] };
+  const data: ProviderMeta = { isProvider: true };
   const controlled: ControllerMeta = { prefix: splitPath(prefix) };
   return metaSet(context, [sym.provider], data) && metaSet(context, [sym.controller], controlled);
 }
@@ -117,9 +117,9 @@ export function metaGetInject(cls: Constructor): Record<SSKey, InjectMetadata> |
 /**
  * Metadata is stored at: `class[sym.metadata][sym.root][sym.provider]`
  */
-export function metaSetProvider(context: ClassDecoratorContext, args: unknown[] = []): boolean {
-  const data: ProviderMeta = { args };
-  return metaSet(context, [sym.provider], data);
+export function metaSetProvider(context: ClassDecoratorContext): boolean {
+  // FIXED 取消构造参数支持：provider 一律无参构造，需要预置参数时请使用 factory provider。
+  return metaSet(context, [sym.provider], { isProvider: true } as ProviderMeta);
 }
 
 /**
@@ -127,9 +127,8 @@ export function metaSetProvider(context: ClassDecoratorContext, args: unknown[] 
  *
  * Metadata is stored at: `class[sym.metadata][sym.root][sym.provider]`
  */
-export function metaSetProviderOnClass(target: Constructor, args: unknown[] = []): boolean {
-  const data: ProviderMeta = { args };
-  return ReflectDeep.set(target, [sym.metadata, sym.root, sym.provider], data);
+export function metaSetProviderOnClass(target: Constructor): boolean {
+  return ReflectDeep.set(target, [sym.metadata, sym.root, sym.provider], { isProvider: true } as ProviderMeta);
 }
 
 export function metaGetProvider(cls: Constructor): ProviderMeta {

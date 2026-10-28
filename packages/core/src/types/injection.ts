@@ -186,12 +186,13 @@ export interface ControllerMeta {
   prefix: string[];
 }
 
+/**
+ * Provider metadata
+ * - Constructor arguments are intentionally not supported: when a pre-configured
+ *   instance is needed, expose it through a factory provider instead
+ */
 export interface ProviderMeta {
-  /**
-   * !Not supported yet
-   * @todo
-   */
-  args: any[];
+  readonly isProvider: true;
 }
 
 export interface ModuleMeta {

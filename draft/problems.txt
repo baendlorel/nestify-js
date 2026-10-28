@@ -94,26 +94,25 @@ packages/core 问题清单
 NestJS 对照：允许同一 controller 声明在多个模块中（`RoutesResolver.resolve` 按模块逐个注册；`routes-mapper` 注释即「按声明它的每个模块各注册一次」）。
 实现：去重键由「controller 类」改为「controller + 生效路由前缀」，不同前缀各注册一次，相同前缀仍只注册一次（避免 Fastify 重复路由报错）。
 
-21. toModule 的构造参数被丢弃
-位置：packages/core/src/decorators/module.ts:39、packages/core/src/decorators/injectable.ts:17
-复现：toModule(External, { args: ['expected'] }) 创建的 External 实例收到 undefined。
-原因：toInjectable 接收 args，但调用 metaSetProviderOnClass 时没有传入。
-建议：将参数写入 provider 元数据，并测试实例构造。
+✅ 21. toModule 的构造参数被丢弃
+位置：packages/core/src/decorators/module.ts:39、packages/core/src/decorators/injectable.ts:17、packages/core/src/register/meta.ts:120、packages/core/src/register/lazy-injector.ts:70
+测试：packages/core/tests/to-module.test.ts
+决定：按你的意见**取消 args 支持**（需要预置参数请用 factory provider）。`toModule` / `toInjectable` / `metaSetProvider*` 均去除 args，`ProviderMeta` 改为标记对象 `{ isProvider: true }`，provider 一律无参构造。
 
-22. expectArray 忽略元素检查函数返回的错误
-位置：packages/core/src/asserts/expect.ts:70、packages/core/src/register/expect-module.ts:160
-复现：expectArray([1], 'bad', () => 'invalid') 不抛错。
-影响：调用方依赖返回字符串报告错误的检查失效，例如模块 exports 是否属于 providers 的检查不会生效。
-建议：统一谓词的返回契约并处理错误结果，或把调用方全部改为显式抛错。
+✅ 22. expectArray 忽略元素检查函数返回的错误
+位置：packages/core/src/asserts/expect.ts:70、packages/core/src/asserts/expect.ts:80、packages/core/src/register/expect-module.ts:97
+测试：packages/core/tests/expect-array.test.ts
+实现：统一谓词返回契约 —— 返回字符串用该信息报错，返回 `false` 用外层 msg 报错，抛错原样传播。
+顺带修复：`expectController` 的路径谓词原用 `_isPathNode` 会拒绝 `:id` 等合法路由参数（之前返回值被忽略所以从未生效），现改为只校验节点结构（非空且不含 `/`），语法校验仍由 `splitPath` 负责。
 
-23. HttpMethod 没有返回装饰器工厂
+✅ 23. HttpMethod 没有返回装饰器工厂
 位置：packages/core/src/decorators/router/http-methods.ts:21
-复现：HttpMethod('HEAD') 返回 undefined，因此不能通过公开接口声明自定义 HTTP 方法。
-建议：返回 registerRoute(method.toUpperCase())，并测试装饰器注册结果。
+测试：packages/core/tests/http-method.test.ts
+实现：`HttpMethod(method)` 现在 `return registerRoute(method.toUpperCase())`，可用 `@(HttpMethod('HEAD')('/path'))` 声明自定义方法。
 
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests：16 个文件、136 项通过。
+- pnpm exec vitest run packages/core/tests：19 个文件、145 项通过。
 - cron 调度已改为依赖 `node-cron@^4.6.0`（`createTask` / `start` / `stop` / `destroy` / `getNextRun`），移除 `cron-parser` 依赖与手写 timer 逻辑。
 - 临时针对性复现：21 项通过；测试文件已删除。复现测试对源码运行时缺少构建宏的 _throw 提供了本地测试替身，不代表已修复该环境问题。
 - 额外尝试包含根目录 tests 和 packages/nestify/tests 的测试：部分套件因根目录无法解析 fastify、源码运行时 _throw 未定义或旧测试引用已不存在的 injector 而失败；因此不能宣称完整集成测试通过。

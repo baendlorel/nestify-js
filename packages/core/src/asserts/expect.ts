@@ -67,25 +67,35 @@ export const expectFunction: (o: any, msg: string) => asserts o is AnyFunction =
   }
 };
 
+export type ArrayPredicate<T> = (value: T, index: number, array: T[]) => void | string | boolean | null | undefined;
+
 /**
  * Asserts that `arr` is an array.
- * - If `asserter` is provided, it will be called for each element in the array.
- *   - If it returns a string, it will throw an error with that message.
- *   - If it returns `null` or `undefined`, the element is considered valid.
- *   - If it returns `boolean` and value is `true`, the element is considered valid.
+ * - If `predicate` is provided, it will be called for each element in the array.
+ *   - Throwing inside it propagates as-is
+ *   - Returning a string throws an error with that message
+ *   - Returning `false` throws an error with `msg`
+ *   - Returning `true`, `null` or `undefined` marks the element as valid
  */
-export const expectArray: <T = any>(
-  arr: any,
-  msg: string,
-  predicate?: (value: T, index: number, array: T[]) => void,
-) => asserts arr is T[] = (arr, msg, predicate) => {
+export const expectArray: <T = any>(arr: any, msg: string, predicate?: ArrayPredicate<T>) => asserts arr is T[] = (
+  arr,
+  msg,
+  predicate,
+) => {
   if (!_isArray(arr)) {
     throw new NestifyError(msg);
   }
 
   if (predicate) {
     for (let i = 0; i < arr.length; i++) {
-      predicate(arr[i], i, arr);
+      const result = predicate(arr[i], i, arr) as string | boolean | null | undefined;
+      // FIXED 元素检查函数的返回值不再被忽略：返回字符串时用该信息报错，返回 false 时用外层 msg 报错。
+      if (typeof result === 'string') {
+        throw new NestifyError(result);
+      }
+      if (result === false) {
+        throw new NestifyError(msg);
+      }
     }
   }
 };

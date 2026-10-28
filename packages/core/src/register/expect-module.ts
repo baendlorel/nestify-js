@@ -1,16 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { InjectMetadata, InjectToken, ProviderOptions } from '@core/types/injection.js';
 import { inspect } from 'node:util';
-import {
-  sym,
-  _isArray,
-  _isConstructable,
-  _isObject,
-  _isPathNode,
-  _ownKeys,
-  type Constructor,
-  type SSKey,
-} from '@nestify-js/shared';
+import { sym, _isArray, _isConstructable, _isObject, _ownKeys, type Constructor, type SSKey } from '@nestify-js/shared';
 
 import { RouteConfig } from '@core/types/index.js';
 import { toModuleClass } from '@core/common/utils.js';
@@ -37,17 +28,16 @@ const injectableCache = new Set<any>();
 /**
  *
  * A provider should have
- * - provider: an object of provider metadata
- *   - args: an array of constructor arguments
+ * - provider: an object marking the class as a provider
  * - injections?: a record of class dependencies
  */
 export function expectProvider(target: unknown): asserts target is Constructor {
   expectClass(target, `Target is not a class: ${String(target)} ${Object(target).name}`);
 
-  // Should have args[]
   const providerMetadata = metaGetProvider(target);
   expectObject(providerMetadata, `class '${target.name}' is not a provider`);
-  expectArray(providerMetadata.args, 'provider metadata.args should be an array');
+  // FIXED 取消构造参数后，只校验 provider 标记不再校验 args 数组。
+  expect(providerMetadata.isProvider === true, `class '${target.name}': provider metadata is invalid`);
 
   // If have injections
   const inject = metaGetInject(target);
@@ -95,9 +85,11 @@ export function expectController(target: unknown) {
   expectProvider(target);
 
   // controller metadata check
+  // ! The grammar(including `:param`) is already validated by `splitPath`, this only checks the shape.
+  // FIXED 原谓词用 `_isPathNode` 拒绝 `:id` 等合法路由参数，且返回值被忽略所以从未生效；现改为结构性校验。
   const pred = (pathNode: string) => {
-    if (!_isPathNode(pathNode)) {
-      return `Path node must match /^[a-zA-Z0-9_-]+$/. But got: [${pathNode}]`;
+    if (typeof pathNode !== 'string' || pathNode === '' || pathNode.includes('/')) {
+      return `Path node must be a non-empty string without '/'. But got: [${String(pathNode)}]`;
     }
     return true;
   };
