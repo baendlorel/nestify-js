@@ -130,9 +130,12 @@ describe('JwtService HS256 signatures', () => {
       const unsupported = await standardToken({ alg: 'HS512' }, { sub: 'user' });
       const valid = await app.inject({ url: '/', headers: { authorization: `Bearer ${standard}` } });
       const invalid = await app.inject({ url: '/', headers: { authorization: `Bearer ${unsupported}` } });
+      const missing = await app.inject({ url: '/' });
       expect(valid.statusCode).toBe(200);
       expect(valid.json()).toEqual({ allowed: true });
-      expect(invalid.statusCode).not.toBe(200);
+      // FIXED 认证失败统一返回 401，而不是被默认过滤器当成 400。
+      expect(invalid.statusCode).toBe(401);
+      expect(missing.statusCode).toBe(401);
     } finally {
       await app.close();
     }

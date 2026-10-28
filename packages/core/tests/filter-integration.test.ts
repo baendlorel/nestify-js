@@ -7,6 +7,7 @@ import {
   Get,
   Module,
   NestifyFilter,
+  NotFoundException,
   UseFilters,
   nestify,
 } from '@core/index.js';
@@ -115,6 +116,51 @@ describe('exception filter dispatch', () => {
       const response = await app.inject('/');
       expect(response.statusCode).toBe(409);
       expect(response.body).toBe('all');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('keeps the status and response of an explicit HttpException', async () => {
+    @Controller()
+    class ControllerClass {
+      @Get()
+      handle() {
+        throw new NotFoundException('missing item');
+      }
+    }
+    @Module({ controllers: [ControllerClass] })
+    class App {}
+    const app = await nestify(App);
+    try {
+      const response = await app.inject('/');
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ statusCode: 404, error: 'Not Found', message: 'missing item' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns a generic 500 for unknown errors instead of leaking the message', async () => {
+    @Controller()
+    class ControllerClass {
+      @Get()
+      handle() {
+        throw new Error('sensitive database detail');
+      }
+    }
+    @Module({ controllers: [ControllerClass] })
+    class App {}
+    const app = await nestify(App);
+    try {
+      const response = await app.inject('/');
+      expect(response.statusCode).toBe(500);
+      expect(response.body).not.toContain('sensitive database detail');
+      expect(response.json()).toEqual({
+        error: 'Internal Server Error',
+        statusCode: 500,
+        message: 'Internal server error',
+      });
     } finally {
       await app.close();
     }

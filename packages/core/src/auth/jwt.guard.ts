@@ -4,6 +4,7 @@ import { JwtService } from './jwt.js';
 
 import { _GuardSet, NestifyGuard } from '@core/decorators/middlewares/guard.js';
 import { ExecutionContext } from '@core/common/execution-context.js';
+import { UnauthorizedException } from '@core/exceptions/index.js';
 import { jwt as defaultJwt } from './jwt.js';
 
 const guards = new Map<typeof defaultJwt, Constructor<NestifyGuardLike>>();
@@ -45,7 +46,8 @@ export function JwtGuard(jwt: JwtService = defaultJwt) {
       const token = this.extractTokenFromHeader(request);
 
       if (!token) {
-        throw new Error('No token provided');
+        // FIXED 缺少令牌属于认证失败，抛 UnauthorizedException(401)，不再抛普通 Error 被默认过滤器当作 400。
+        throw new UnauthorizedException('No token provided');
       }
 
       try {
@@ -57,7 +59,11 @@ export function JwtGuard(jwt: JwtService = defaultJwt) {
 
         return true;
       } catch (error) {
-        throw new Error(`Token validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        // FIXED 保留 UnauthorizedException 的 401 语义，其余校验失败同样以 401 返回，不再包装成普通 Error。
+        if (error instanceof UnauthorizedException) {
+          throw error;
+        }
+        throw new UnauthorizedException('Invalid or expired token');
       }
     }
 
