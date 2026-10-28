@@ -16,6 +16,7 @@ function normalize(opts: Partial<NestifyOptions>): NestifyOptions {
   const normalized: NestifyOptions = Object(opts);
   expectModule(normalized.rootModule);
   normalized.allowCrossModuleCircularReference ??= false;
+  normalized.onlyInternalServerError ??= false;
 
   // defaults to empty arrays
   normalized.registerGlobalMiddlewares ??= [];

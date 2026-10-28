@@ -49,8 +49,9 @@ packages/core 问题清单
 ==
 
 ✅ 12. 默认异常处理把内部错误作为 400 并暴露原始消息
-位置：packages/core/src/register/route/middlewares/filter.ts:17、packages/core/src/register/route/middlewares/filter.ts:25
+位置：packages/core/src/register/route/middlewares/filter.ts:17、packages/core/src/register/route/middlewares/filter.ts:27
 测试：packages/core/tests/filter-integration.test.ts
+新增选项：`NestifyOptions.onlyInternalServerError`（默认 false 保留原始 message；开启后只返回通用 500）
 
 ✅ 13. JwtGuard 对缺失或无效令牌返回 400 而不是 401
 位置：packages/core/src/auth/jwt.guard.ts:49、packages/core/src/auth/jwt.guard.ts:62
@@ -112,7 +113,7 @@ packages/core 问题清单
 
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests：14 个文件、120 项通过。
+- pnpm exec vitest run packages/core/tests：14 个文件、121 项通过。
 - 临时针对性复现：21 项通过；测试文件已删除。复现测试对源码运行时缺少构建宏的 _throw 提供了本地测试替身，不代表已修复该环境问题。
 - 额外尝试包含根目录 tests 和 packages/nestify/tests 的测试：部分套件因根目录无法解析 fastify、源码运行时 _throw 未定义或旧测试引用已不存在的 injector 而失败；因此不能宣称完整集成测试通过。
 - 本清单不修改框架实现，未对所有输入组合或生产部署配置作穷举。

@@ -141,7 +141,7 @@ describe('exception filter dispatch', () => {
     }
   });
 
-  it('returns a generic 500 for unknown errors instead of leaking the message', async () => {
+  it('keeps the original message of unknown errors by default', async () => {
     @Controller()
     class ControllerClass {
       @Get()
@@ -152,6 +152,30 @@ describe('exception filter dispatch', () => {
     @Module({ controllers: [ControllerClass] })
     class App {}
     const app = await nestify(App);
+    try {
+      const response = await app.inject('/');
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        error: 'Internal Server Error',
+        statusCode: 500,
+        message: 'sensitive database detail',
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('hides the message of unknown errors when `onlyInternalServerError` is enabled', async () => {
+    @Controller()
+    class ControllerClass {
+      @Get()
+      handle() {
+        throw new Error('sensitive database detail');
+      }
+    }
+    @Module({ controllers: [ControllerClass] })
+    class App {}
+    const app = await nestify(App, { onlyInternalServerError: true });
     try {
       const response = await app.inject('/');
       expect(response.statusCode).toBe(500);

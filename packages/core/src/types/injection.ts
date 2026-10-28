@@ -114,6 +114,17 @@ export interface NestifyOptions {
   allowCrossModuleCircularReference: boolean;
 
   /**
+   * Only return a generic `Internal Server Error` for unhandled(unknown) exceptions.
+   * - `false`(default): the response keeps `error.message` of the thrown error
+   * - `true`: the response body never contains internal details, the error is only written to the server log
+   *
+   * Explicit `HttpException`s are not affected by this option.
+   *
+   * @default false
+   */
+  onlyInternalServerError: boolean;
+
+  /**
    * Middlewares listed here are no need to be registered in `@Module({providers:[...]})` manually.
    * - Only register, you can use them as you want.
    * - If you want to apply middlewares globally, use `useGlobalXXX` options.

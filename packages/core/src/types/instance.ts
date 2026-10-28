@@ -14,6 +14,13 @@ export interface NestifyInstance extends FastifyInstance {
   collection: Collection;
 
   /**
+   * Only return a generic `Internal Server Error` for unhandled exceptions.
+   * - Mirrors `NestifyOptions.onlyInternalServerError`
+   * @internal
+   */
+  onlyInternalServerError: boolean;
+
+  /**
    * Start all registered cron jobs
    * This function is called after all modules are initialized and the application is ready
    * @internal

@@ -23,6 +23,7 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
 
   app.injector = new Injector();
   app.collection = new Collection();
+  app.onlyInternalServerError = opts.onlyInternalServerError;
 
   // #region init functions
 

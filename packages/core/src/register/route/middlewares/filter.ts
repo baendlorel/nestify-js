@@ -22,12 +22,17 @@ function createDefaultFilter(app: NestifyInstance): TaskifyAsync<FilterTask> {
     if (exception instanceof HttpException) {
       reply.status(exception.statusCode).send(exception.getResponse());
     } else {
-      // FIXED 未知异常不再按 400 返回原始 error.message：改为记录服务端日志并返回通用 500，避免误报客户端错误和泄露内部信息。
+      // FIXED 未知异常不再按 400 返回：统一记录服务端日志并按 500 处理。
       app.log.error({ err: exception }, 'Unhandled exception');
+      // FIXED 是否隐藏原始 message 改为可配置（`onlyInternalServerError`，默认 false 即保留原始信息）。
+      const message =
+        app.onlyInternalServerError === true
+          ? 'Internal server error'
+          : ((exception as Error)?.message ?? String(exception));
       reply.status(HttpStatus.INTERNAL_SERVER_ERROR).send({
         error: 'Internal Server Error',
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Internal server error',
+        message,
       });
     }
 
