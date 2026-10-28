@@ -88,11 +88,11 @@ packages/core 问题清单
 测试：packages/core/tests/cron.test.ts
 实现：自研 timer / 代次逻辑已整体删除，start / stop / destroy 直接委托给 node-cron 任务对象，不再存在重复计时。
 
-20. 同一 controller 通过不同模块前缀导入时只注册第一条路径
-位置：packages/core/src/register/route/controller.ts:34、packages/core/src/register/module.ts:44
-复现：Child 模块分别位于 first 和 second 前缀下时，/first/item 可访问，/second/item 返回 404。
-原因：去重只使用 controller 类，不包含继承的模块前缀。
-建议：明确同一 controller 的多前缀语义，并按有效路由或 controller+前缀去重。
+✅ 20. 同一 controller 通过不同模块前缀导入时只注册第一条路径
+位置：packages/core/src/register/route/controller.ts:83、packages/core/src/register/route/controller.ts:85、packages/core/src/register/route/controller.ts:102
+测试：packages/core/tests/controller-multi-module.test.ts
+NestJS 对照：允许同一 controller 声明在多个模块中（`RoutesResolver.resolve` 按模块逐个注册；`routes-mapper` 注释即「按声明它的每个模块各注册一次」）。
+实现：去重键由「controller 类」改为「controller + 生效路由前缀」，不同前缀各注册一次，相同前缀仍只注册一次（避免 Fastify 重复路由报错）。
 
 21. toModule 的构造参数被丢弃
 位置：packages/core/src/decorators/module.ts:39、packages/core/src/decorators/injectable.ts:17
@@ -113,7 +113,7 @@ packages/core 问题清单
 
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests：15 个文件、134 项通过。
+- pnpm exec vitest run packages/core/tests：16 个文件、136 项通过。
 - cron 调度已改为依赖 `node-cron@^4.6.0`（`createTask` / `start` / `stop` / `destroy` / `getNextRun`），移除 `cron-parser` 依赖与手写 timer 逻辑。
 - 临时针对性复现：21 项通过；测试文件已删除。复现测试对源码运行时缺少构建宏的 _throw 提供了本地测试替身，不代表已修复该环境问题。
 - 额外尝试包含根目录 tests 和 packages/nestify/tests 的测试：部分套件因根目录无法解析 fastify、源码运行时 _throw 未定义或旧测试引用已不存在的 injector 而失败；因此不能宣称完整集成测试通过。

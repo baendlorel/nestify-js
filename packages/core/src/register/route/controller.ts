@@ -80,19 +80,31 @@ function rejectRouteRequestSchemas(schema: PipeFullSchema | undefined, route: st
   }
 }
 
-const registeredControllers = new WeakMap<NestifyInstance, Set<Constructor>>();
+const registeredControllers = new WeakMap<NestifyInstance, Map<Constructor, Set<string>>>();
 
 export function registerController(app: NestifyInstance, controller: Constructor, modulePrefix: string[]) {
-  if (!registeredControllers.has(app)) {
-    registeredControllers.set(app, new Set());
+  let prefixes = registeredControllers.get(app);
+  if (!prefixes) {
+    prefixes = new Map();
+    registeredControllers.set(app, prefixes);
   }
-  const registered = registeredControllers.get(app)!;
-  if (registered.has(controller)) {
+
+  let registeredPrefixes = prefixes.get(controller);
+  if (!registeredPrefixes) {
+    registeredPrefixes = new Set();
+    prefixes.set(controller, registeredPrefixes);
+  }
+
+  // FIXED 去重键由「controller 类」改为「controller + 生效的路由前缀」：
+  // 同一 controller 可以在多个模块(不同前缀)下各注册一次(与 NestJS 一致)，前缀相同仍只注册一次，避免路由重复注册。
+  const controllerPrefix = metaGetController(controller).prefix;
+  // ! Empty segments come from modules without a prefix, normalize them before comparing
+  const prefixKey = concatRoute(modulePrefix, controllerPrefix, []);
+  if (registeredPrefixes.has(prefixKey)) {
     return;
   }
-  registered.add(controller);
+  registeredPrefixes.add(prefixKey);
 
-  const controllerPrefix = metaGetController(controller).prefix;
   const routes = metaGetRoute(controller);
   const instance = app.injector.createInstance(controller);
 
