@@ -4,9 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Cron, bindCronJob } from '@core/schedule/cron.js';
 import type { NestifyInstance } from '@core/types/instance.js';
 
-// Node.js `setTimeout` cap, must match `MAX_DELAY` in `schedule/cron.ts`
-const MAX_DELAY = 2147483647;
-
 /**
  * `bindCronJob` is called by the injector with an instance that has already been
  * enriched by `apply()`. Unit tests bypass that path, so the cast is done once here.
@@ -279,12 +276,11 @@ describe('cron lifecycle', () => {
     await app.close();
   });
 
-  it('keeps the long-delay rollover timer cancellable', async () => {
+  it('cancels a long-interval job that is stopped before it fires', async () => {
     vi.useFakeTimers();
     const run = vi.fn();
 
     class YearlyTask {
-      // a yearly run is far beyond MAX_DELAY, so the timer has to roll over
       @Cron('0 0 1 1 *', 'yearly')
       handle() {
         run();
@@ -296,15 +292,14 @@ describe('cron lifecycle', () => {
     app.launchCronJobs();
 
     const [{ nextTime }] = app.getCronJobStates();
-    const untilFirstRun = nextTime - Date.now();
-    expect(untilFirstRun).toBeGreaterThan(MAX_DELAY);
-
-    // cross a rollover boundary, then stop: the re-armed timer must be cleared
-    await vi.advanceTimersByTimeAsync(MAX_DELAY);
-    expect(run).not.toHaveBeenCalled();
+    const untilNext = nextTime - Date.now();
+    expect(untilNext).toBeGreaterThan(0);
 
     app.stopCronJob('yearly');
-    await vi.advanceTimersByTimeAsync(untilFirstRun);
+    // a stopped job reports no next run
+    expect(app.getCronJobStates()[0]).toMatchObject({ running: false, nextTime: -1 });
+
+    await vi.advanceTimersByTimeAsync(untilNext + 1000);
     expect(run).not.toHaveBeenCalled();
 
     await app.close();

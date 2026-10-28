@@ -13,7 +13,7 @@ export default defineConfig({
   outDir: 'dist',
   format: ['esm', 'cjs'],
   deps: {
-    neverBundle: ['cron-parser', /^fastify/, /^@fastify/, /^@nestify\//],
+    neverBundle: ['node-cron', /^fastify/, /^@fastify/, /^@nestify\//],
   },
   tsconfig: root.join('tsconfig.build.json'),
   dts: true,

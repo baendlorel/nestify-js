@@ -1,7 +1,7 @@
 import type { AnyFunction, Constructor } from '@core/types/primitives.js';
 import type { NestifyInstance } from '@core/types/instance.js';
 
-import { CronExpressionParser } from 'cron-parser';
+import cron, { type ScheduledTask } from 'node-cron';
 import { _entries, getOrInsertWeak, promiseTry, sym } from '@nestify-js/shared';
 import { expectMethodDecorator } from '@core/asserts/decorator-context.js';
 import { metaGet, metaSet } from '@core/register/meta.js';
@@ -13,16 +13,8 @@ interface CronMeta {
 
 interface JobData {
   uid?: string;
-  fn: AnyFunction;
   expression: string;
-  nextTime: number;
-  timer: NodeJS.Timeout | null;
-  running: boolean;
-  /**
-   * Bumped on every start/stop, so an execution of a previous round can never
-   * schedule a timer for the current one.
-   */
-  generation: number;
+  task: ScheduledTask;
 }
 
 interface CronStore {
@@ -34,9 +26,18 @@ interface CronStore {
   boundTargets: WeakMap<object, WeakSet<AnyFunction>>;
 }
 
+/**
+ * Mark a method as a cron job.
+ * - Only metadata is registered here, scheduling is delegated to `node-cron`
+ * @param expression cron expression, validated by `node-cron`
+ * @param uid optional unique id, used by `startCronJob` / `stopCronJob`
+ */
 export function Cron(expression: string, uid?: string): AnyFunction {
   // ! Throws when expression is invalid.
-  CronExpressionParser.parse(expression);
+  if (!cron.validate(expression)) {
+    // FIXED 表达式校验交给 node-cron，避免自研解析与真正的调度器语法不一致。
+    throw new Error(`Invalid cron expression: '${expression}'`);
+  }
 
   return function (target: AnyFunction, context: ClassMethodDecoratorContext) {
     expectMethodDecorator(target, context);
@@ -44,43 +45,13 @@ export function Cron(expression: string, uid?: string): AnyFunction {
   };
 }
 
-// 2 ** 31 - 1. Maximum delay for setTimeout in Node.js (approximately 24.8 days)
-const MAX_DELAY = 2147483647;
-
-function longTimeout(job: JobData, fn: () => void, delay: number): void {
-  if (delay >= Number.MAX_SAFE_INTEGER) {
-    throw new Error('Delay exceeds the maximum safe integer value.');
-  }
-
-  if (delay < MAX_DELAY) {
-    job.timer = setTimeout(fn, delay);
-  } else {
-    job.timer = setTimeout(() => longTimeout(job, fn, delay - MAX_DELAY), MAX_DELAY);
-  }
-}
-
-function startJob(job: JobData) {
-  // ! Won't start the running jobs.
-  if (job.running) {
-    return;
-  }
-
-  // FIXED 每次启动推进代次：上一轮仍在执行的 handler 完成后不能再调度计时器，避免重复计时。
-  job.generation++;
-  job.running = true;
-  job.fn();
-}
-
-function stopJob(job: JobData) {
-  // FIXED 停止时也推进代次，使仍在进行中的执行在结束后无法重新调度。
-  job.generation++;
-  job.running = false;
-
-  if (job.timer) {
-    clearTimeout(job.timer);
-    job.timer = null;
-  }
-  job.nextTime = -1;
+/**
+ * `node-cron` reports `stopped` before the task is started and `destroyed` after it
+ * is removed, so any other state means the job is enabled.
+ */
+function isRunning(task: ScheduledTask): boolean {
+  const status = task.getStatus();
+  return status === 'idle' || status === 'running';
 }
 
 /**
@@ -102,10 +73,12 @@ function initMethods(app: NestifyInstance, store: CronStore) {
   }
 
   const jobs = store.jobs;
+  const findJob = (uid: string) => jobs.find((job) => job.uid === uid);
 
   app.launchCronJobs = () => {
     for (let i = 0; i < jobs.length; i++) {
-      startJob(jobs[i]);
+      // ! `start()` is a no-op when the task is already started.
+      jobs[i].task.start();
     }
   };
 
@@ -115,14 +88,7 @@ function initMethods(app: NestifyInstance, store: CronStore) {
       return;
     }
 
-    const job = jobs.find((j) => j.uid === uid);
-
-    // Non-exist or already running, no need to start again
-    if (!job) {
-      return;
-    }
-
-    startJob(job);
+    findJob(uid)?.task.start();
   };
 
   app.stopCronJob = (uid: string) => {
@@ -131,25 +97,22 @@ function initMethods(app: NestifyInstance, store: CronStore) {
       return;
     }
 
-    const job = jobs.find((j) => j.uid === uid);
-    if (!job) {
-      return;
-    }
-
-    stopJob(job);
+    findJob(uid)?.task.stop();
   };
 
   app.getCronJobStates = () =>
-    jobs.map(({ uid, expression, nextTime, running }) => ({
+    jobs.map(({ uid, expression, task }) => ({
       uid,
       expression,
-      nextTime,
-      running,
+      // `node-cron` returns `null` while the task is not started
+      nextTime: task.getNextRun()?.getTime() ?? -1,
+      running: isRunning(task),
     }));
 
   app.addHook('onClose', (_app, done) => {
     for (let i = 0; i < jobs.length; i++) {
-      stopJob(jobs[i]);
+      // FIXED 关闭应用时直接销毁任务，计时与取消完全交给 node-cron。
+      jobs[i].task.destroy();
     }
     jobs.length = 0;
     _stores.delete(app);
@@ -175,12 +138,13 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
     return;
   }
 
-  // FIXED 去重改为按「实例 + 方法」：同一类的不同实例各自注册任务，同一实例的重复注册仍只算一次。
+  // FIXED 去重仍按「实例 + 方法」：同一实例的多个 token 只绑定一次，同类的不同实例各自独立。
   const boundTargets = getBoundTargets(store, instance);
   const err = (...args: Parameters<typeof app.log.error>) => app.log.error(...args);
   const entries = _entries(cronMeta);
+
   for (let i = 0; i < entries.length; i++) {
-    const target = instance[entries[i][0]] as () => void;
+    const target = instance[entries[i][0]] as AnyFunction;
 
     // ! The same instance can be registered under several tokens, bind each method once
     if (boundTargets.has(target)) {
@@ -190,44 +154,10 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
 
     const { expression, uid } = entries[i][1];
 
-    const fn = () => {
-      if (!job.running) {
-        return;
-      }
+    // FIXED 只创建任务；计时、重叠控制与取消全部由 node-cron 实现。
+    const task = cron.createTask(expression, () => promiseTry(target, instance).catch(err));
 
-      // FIXED 记录本次调度的代次，停止或重启后旧执行完成时不再安排下一轮。
-      const generation = job.generation;
-
-      job.nextTime = CronExpressionParser.parse(expression).next().getTime();
-      // & Parse every time so delta is always positive.
-      // & Sharing the same parsed object might lead to a negative delta.
-      const delta = job.nextTime - Date.now();
-
-      longTimeout(
-        job,
-        () =>
-          promiseTry(target, instance)
-            .catch(err)
-            .finally(() => {
-              if (job.generation === generation) {
-                fn();
-              }
-            }),
-        delta,
-      );
-    };
-
-    const job: JobData = {
-      uid,
-      fn,
-      expression,
-      nextTime: -1,
-      timer: null,
-      running: false,
-      generation: 0,
-    };
-
-    store.jobs.push(job);
+    store.jobs.push({ uid, expression, task });
   }
 }
 

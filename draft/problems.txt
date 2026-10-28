@@ -79,14 +79,14 @@ packages/core 问题清单
 - 内置 `@Body()` / `@File()` 与 `@UsePipes(...)` 可共存；路由 schema 取第一个带 schema 的 pipe
 
 ✅ 18. Cron 按函数身份去重，误丢弃不同实例上的相同方法
-位置：packages/core/src/schedule/cron.ts:34、packages/core/src/schedule/cron.ts:89、packages/core/src/schedule/cron.ts:178
+位置：packages/core/src/schedule/cron.ts:60、packages/core/src/schedule/cron.ts:129、packages/core/src/schedule/cron.ts:158
 测试：packages/core/tests/cron.test.ts
-实现：`boundTargets` 改为 `WeakMap<实例, WeakSet<方法>>`，按「实例 + 方法」去重，同一实例重复注册仍只绑定一次。
+实现：去重键为「实例 + 方法」（`WeakMap<实例, WeakSet<方法>>`）；每个任务是 node-cron 的独立实例，同类不同实例天然互不干扰。
 
 ✅ 19. Cron 执行过程中停止再启动会产生重复计时器
-位置：packages/core/src/schedule/cron.ts:62、packages/core/src/schedule/cron.ts:74、packages/core/src/schedule/cron.ts:198
+位置：packages/core/src/schedule/cron.ts:52、packages/core/src/schedule/cron.ts:69
 测试：packages/core/tests/cron.test.ts
-实现：`JobData` 新增 `generation` 代次，start/stop/close 均推进代次；旧执行完成时代次不匹配则不再调度下一轮。
+实现：自研 timer / 代次逻辑已整体删除，start / stop / destroy 直接委托给 node-cron 任务对象，不再存在重复计时。
 
 20. 同一 controller 通过不同模块前缀导入时只注册第一条路径
 位置：packages/core/src/register/route/controller.ts:34、packages/core/src/register/module.ts:44
@@ -114,6 +114,7 @@ packages/core 问题清单
 验证记录
 ========
 - pnpm exec vitest run packages/core/tests：15 个文件、134 项通过。
+- cron 调度已改为依赖 `node-cron@^4.6.0`（`createTask` / `start` / `stop` / `destroy` / `getNextRun`），移除 `cron-parser` 依赖与手写 timer 逻辑。
 - 临时针对性复现：21 项通过；测试文件已删除。复现测试对源码运行时缺少构建宏的 _throw 提供了本地测试替身，不代表已修复该环境问题。
 - 额外尝试包含根目录 tests 和 packages/nestify/tests 的测试：部分套件因根目录无法解析 fastify、源码运行时 _throw 未定义或旧测试引用已不存在的 injector 而失败；因此不能宣称完整集成测试通过。
 - 本清单不修改框架实现，未对所有输入组合或生产部署配置作穷举。
