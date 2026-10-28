@@ -357,6 +357,8 @@ class AppModule {}
 
 使用默认 `jwt` 服务或 `JwtGuard()` 前请配置非空密钥，框架不再提供默认签名密钥。
 
+`JwtService` 仅支持 HS256，使用标准 base64url 编码的 HMAC 签名，并在验证时拒绝不支持的 header 算法。旧版本生成的令牌使用了非标准签名，通常需要重新签发；验证时不会回退接受旧签名。
+
 框架自带 `JwtGuard`（已自动注册，无需加入 providers）。它会校验 `Authorization: Bearer <token>` 中的 token，并把解码后的 payload 挂到请求上：
 
 ```typescript

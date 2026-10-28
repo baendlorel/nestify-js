@@ -7,53 +7,26 @@ packages/core 问题清单
 高
 ==
 
-1. JWT 使用公开、固定的默认密钥
+✅ 1. JWT 使用公开、固定的默认密钥
 位置：packages/core/src/auth/jwt.ts:31、packages/core/src/auth/jwt.ts:240
-代码确认：未传 secret 时使用固定字符串，导出的 jwt 单例和默认 JwtGuard 也使用它。
-若应用未显式配置密钥，任何了解该默认值的人都可以生成能通过该服务校验的令牌。
-建议：要求调用方配置非空密钥，生产环境不要使用固定默认值。
---已解决，请你更新readme
 
-2. 默认请求 schema 校验被关闭，且影响后续 Fastify 路由
+✅ 2. 默认请求 schema 校验被关闭，且影响后续 Fastify 路由
 位置：packages/core/src/register/module.ts:136、packages/core/src/pipes/basic-transformer.ts:17
-复现：没有自定义 validatorCompiler 时，@Body 声明 required 字段仍接受空对象；apply 后另行注册的普通 Fastify 路由同样接受非法请求。
-原因：注册时安装恒返回 true 的编译器，原编译器不存在时不会恢复；内置 pipe 随后也使用这一编译器。请求验证可能被静默绕过。
-建议：隔离文档 schema 和实际校验，保留 Fastify 默认验证器，并在失败路径恢复原配置。
---帮我修
 
-3. 不同应用共享第一个请求使用的验证编译器
+✅ 3. 不同应用共享第一个请求使用的验证编译器
 位置：packages/core/src/pipes/basic-transformer.ts:14、packages/core/src/pipes/basic-transformer.ts:109
-复现：同一个 transformer 先接收编译器 A，再接收编译器 B，第二次仍使用 A 的结果。内置 pipe 使用进程级单例，且即使当前无 schema 也会缓存编译器。
-影响：多个应用或不同编译配置互相污染，可能使用另一个应用的校验规则或恒成功的编译器。
-建议：按应用/编译器隔离缓存，并把实际编译器及必要的路由上下文纳入缓存键。
---帮我修
 
-4. 超过大小限制的上传文件被静默截断并当作成功处理
+✅ 4. 超过大小限制的上传文件被静默截断并当作成功处理
 位置：packages/core/src/multipart/uploaded-file.ts:30、packages/core/src/multipart/pipes/file.pipe.ts:48
-复现：@File({ limits: { fileSize: 3 } }) 上传 6 字节，处理器收到 3 字节并返回 200。多文件路径也使用相同的自定义 toBuffer。
-原因：包装类直接读取流，不检查流的 truncated 标志，也没有使用 multipart 自带的限制错误处理。
-建议：在流结束后检查截断并返回明确的大小限制错误，不能把不完整文件当作有效上传。
---帮我修
 
-5. 异常过滤器的匹配条件反了，且没有可靠的默认兜底
+✅ 5. 异常过滤器的匹配条件反了，且没有可靠的默认兜底
 位置：packages/core/src/register/route/middlewares/filter.ts:46、packages/core/src/register/route/middlewares/filter.ts:54
-复现：抛出 BadRequestException 时，@Filter(BadRequestException) 被跳过，@Filter(TypeError) 却执行。
-没有指定异常类的 @Filter() 因空数组永不跳过而碰巧捕获所有错误；只要配置了过滤器就不再启用默认过滤器，且串行执行不会在处理后停止。
-影响：错误由不相干的处理器处理，或没有处理器发送响应；多个处理器还可能重复发送。
-建议：按匹配条件执行，明确处理完成后的终止与未匹配时的默认回退。
---帮我修
 
-6. JWT 的 HS256 签名不是标准 JWT 签名
+✅ 6. JWT 的 HS256 签名不是标准 JWT 签名
 位置：packages/core/src/auth/jwt.ts:57、packages/core/src/auth/jwt.ts:76
-复现：将输出与 Node createHmac('sha256', secret).update(signingInput).digest('base64url') 对比，签名不一致。
-原因：摘要先转换为 binary 字符串，再按 UTF-8 重新编码；本服务签发和校验虽然彼此一致，但通常无法与标准 JWT 实现互通。
-建议：直接对摘要字节做 base64url 编码，并用标准实现的双向测试向量验证。
 
-7. JWT 声明的算法与实际签名算法不一致，验证时也不校验 header
+✅ 7. JWT 声明的算法与实际签名算法不一致，验证时也不校验 header
 位置：packages/core/src/types/auth.ts:38、packages/core/src/auth/jwt.ts:76、packages/core/src/auth/jwt.ts:102、packages/core/src/auth/jwt.ts:166
-代码确认：类型允许 HS384、HS512 和 RS 系列；签发只改变 header.alg，实际始终使用 HMAC-SHA256；verify 不解析或限制 header.alg。
-影响：令牌算法声明失真，无法实现调用方预期的算法策略和标准互操作。这里不假定可直接绕过现有签名校验。
-建议：仅暴露实际支持的算法，验证 header 和允许的算法，或使用成熟 JWT 库。
 
 8. JWT 过期时间边界及类型校验不正确
 位置：packages/core/src/auth/jwt.ts:181

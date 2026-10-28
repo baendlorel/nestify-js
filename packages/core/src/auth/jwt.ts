@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest as NestifyRequest } from 'fastify';
 import type { JwtPayload, JwtSignOptions, JwtVerifyOptions, JwtModuleOptions } from '@core/types/auth.js';
 import { _set, sym, _get, _isObject, _isArray } from '@nestify-js/shared';
@@ -8,7 +8,7 @@ import { UnauthorizedException } from '@core/exceptions/index.js';
 /**
  * Simple JWT Service implementation
  * - Uses Node.js built-in crypto for signing and verification
- * - Supports HS256 algorithm by default
+ * - Supports the HS256 algorithm
  */
 export class JwtService {
   // # actually static but not static methods
@@ -77,14 +77,18 @@ export class JwtService {
     if (secret === null) {
       throw new Error('[Nestify] Secret is not set');
     }
-    const hmac = createHmac('sha256', secret);
-    hmac.update(data);
-    return this.base64UrlEncode(hmac.digest().toString('binary'));
+    // FIXED JWT 签名必须直接编码 HMAC 字节，不能将二进制字符串按 UTF-8 再次编码。
+    return createHmac('sha256', secret).update(data).digest('base64url');
   }
 
   private validateSignOptions(options: JwtSignOptions): JwtSignOptions {
     if (!_isObject<JwtSignOptions>(options)) {
       throw new Error('signOptions must be an object');
+    }
+
+    // FIXED 当前仅实现 HS256，同时在运行时拒绝 JavaScript 调用方提供的其他算法。
+    if (options.algorithm !== undefined && options.algorithm !== 'HS256') {
+      throw new Error(`Unsupported JWT algorithm: ${String(options.algorithm)}`);
     }
 
     if (options.expiresIn !== undefined) {
@@ -104,7 +108,7 @@ export class JwtService {
 
     // Create header
     const header = {
-      alg: opts.algorithm || 'HS256',
+      alg: opts.algorithm ?? 'HS256',
       typ: 'JWT',
     };
 
@@ -168,10 +172,38 @@ export class JwtService {
 
     const [encodedHeader, encodedPayload, signature] = parts;
 
+    // FIXED 不根据不受信任的 header 选择算法，只接受本服务实际实现的 HS256。
+    if (!/^[A-Za-z0-9_-]+$/.test(encodedHeader)) {
+      throw new Error('Invalid JWT header');
+    }
+    const headerBytes = Buffer.from(encodedHeader, 'base64url');
+    if (headerBytes.toString('base64url') !== encodedHeader) {
+      throw new Error('Invalid JWT header');
+    }
+    let header: unknown;
+    try {
+      header = JSON.parse(headerBytes.toString('utf8'));
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new Error('Invalid JWT header');
+      }
+      throw error;
+    }
+    if (!_isObject<Record<string, unknown>>(header) || _isArray(header)) {
+      throw new Error('Invalid JWT header');
+    }
+    if (header.alg !== 'HS256') {
+      throw new Error('Unsupported JWT algorithm');
+    }
+    if ('crit' in header || ('b64' in header && header.b64 !== true)) {
+      throw new Error('Unsupported JWT header parameters');
+    }
+
     // Verify signature
     const expectedSignature = this.createSignature(`${encodedHeader}.${encodedPayload}`, this.secret);
-
-    if (signature !== expectedSignature) {
+    const actualBytes = Buffer.from(signature, 'utf8');
+    const expectedBytes = Buffer.from(expectedSignature, 'utf8');
+    if (actualBytes.length !== expectedBytes.length || !timingSafeEqual(actualBytes, expectedBytes)) {
       throw new Error('Invalid token signature');
     }
 

@@ -41,9 +41,9 @@ export interface JwtSignOptions {
   notBefore?: string | number;
 
   /**
-   * Algorithm to use for signing
+   * Algorithm to use for signing. Only HS256 is supported.
    */
-  algorithm?: 'HS256' | 'HS384' | 'HS512' | 'RS256' | 'RS384' | 'RS512';
+  algorithm?: 'HS256';
 }
 
 /**
