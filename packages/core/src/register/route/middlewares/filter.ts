@@ -19,6 +19,14 @@ function createDefaultFilter(app: NestifyInstance): TaskifyAsync<FilterTask> {
     const http = context.switchToHttp();
     const reply = http.getReply();
 
+    // FIXED 响应已经发送时只记录日志，不再二次写入 reply。
+    if (reply.sent) {
+      if (!(exception instanceof HttpException)) {
+        app.log.error({ err: exception }, 'Unhandled exception after the response was sent');
+      }
+      return { value: undefined, results: [], trivial: true, breakAt: -1, skipped: [] };
+    }
+
     if (exception instanceof HttpException) {
       reply.status(exception.statusCode).send(exception.getResponse());
     } else {
@@ -51,7 +59,8 @@ export function createFilter(app: NestifyInstance, tokens: InjectToken[]): Taski
 
   const catches = tokens.map((token) => {
     const { cls } = app.injector.getDetail<NestifyFilterLike>(token);
-    expectClass(cls, `Filter token '${ph.getName(token)}' must refer to a class, but got ${String(cls)}`);
+    // FIXED 未注册的过滤器 token 给出明确错误，而不是 getPrototypeOf 的 TypeError。
+    expectClass(cls, `Filter token '${ph.getName(token)}' must refer to a registered filter class`);
 
     const exceptionClasses = metaGetFilters(cls) ?? [];
     expectArray(exceptionClasses, 'exceptions classes must be an array', (c) =>

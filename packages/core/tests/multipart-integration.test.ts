@@ -33,6 +33,12 @@ describe('multipart file size limits', () => {
     unread() {
       return { size: 2 };
     }
+
+    @Post('count')
+    @Files({ limits: { files: 1, fileSize: 1024 } })
+    count(files: MultipartFile[]) {
+      return { n: files.length };
+    }
   }
   @Module({ controllers: [ControllerClass], providers: [PipeFile] })
   class App {}
@@ -62,4 +68,25 @@ describe('multipart file size limits', () => {
       }
     });
   }
+
+  it('rejects uploads exceeding the file count limit with 413', async () => {
+    const app = await nestify(App, { plugins: [[multipart, {}]] });
+    try {
+      const body = [
+        '--boundary\r\nContent-Disposition: form-data; name="f"; filename="a.txt"\r\n\r\nA\r\n',
+        '--boundary\r\nContent-Disposition: form-data; name="f"; filename="b.txt"\r\n\r\nB\r\n',
+        '--boundary--\r\n',
+      ].join('');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/count/',
+        headers: { 'content-type': 'multipart/form-data; boundary=boundary' },
+        payload: body,
+      });
+      expect(response.statusCode).toBe(413);
+      expect(response.json().message).toContain('count limits');
+    } finally {
+      await app.close();
+    }
+  });
 });

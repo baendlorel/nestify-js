@@ -495,19 +495,18 @@ const app = await nestify(AppModule, {
 });
 ```
 
-| 选项                                | 类型                                        | 说明                                                                                    |
-| ----------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `logger`                            | `FastifyServerOptions['logger']`            | `fastify.logger` 的快捷方式                                                              |
-| `fastify`                           | `FastifyServerOptions`                      | 传给 fastify 工厂的选项（`fastify(options)`）                                            |
-| `ignoreTrailingSlash`               | `boolean`                                   | 将 `/path/` 和 `/path` 视为同一路由。`@default true`                                     |
-| `plugins`                           | `readonly [plugin, options?][]`             | 在模块应用之前注册的 fastify 插件                                                        |
-| `listen`                            | `boolean \| Partial<FastifyListenOptions>`  | 所有模块注册完成后开始监听；`true` 时使用 `PORT` / `HOST` 环境变量（默认 3000 / 0.0.0.0） |
-| `allowCrossModuleCircularReference` | `boolean`                                   | 必须设为 `true` 才允许**跨模块**循环依赖（同模块内的始终允许）。`@default false`         |
-| `registerGlobalMiddlewares`         | `ProviderOptions[]`                         | 只实例化注册、不全局生效的中间件（内置管道和 `JwtGuard` 会自动前置）                     |
-| `useGlobalGuards`                   | `ProviderOptions[]`                         | 全局生效，按数组顺序：全局 → 控制器 → 方法                                               |
-| `useGlobalInterceptors`             | `ProviderOptions[]`                         | 全局生效，按数组顺序：全局 → 控制器 → 方法 → 控制器 → 全局                               |
-| `useGlobalPipes`                    | `ProviderOptions[]`                         | 全局生效，按数组顺序：全局 → 控制器 → 方法                                               |
-| `useGlobalFilters`                  | `ProviderOptions[]`                         | 全局生效，作为最底层的过滤器                                                             |
+| 选项                                | 类型                                       | 说明                                                                                                 |
+| ----------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `logger`                            | `FastifyServerOptions['logger']`           | `fastify.logger` 的快捷方式                                                                          |
+| `fastify`                           | `FastifyServerOptions`                     | 传给 fastify 工厂的选项（`fastify(options)`）；`routerOptions.ignoreTrailingSlash` 始终强制为 `true` |
+| `plugins`                           | `readonly [plugin, options?][]`            | 在模块应用之前注册的 fastify 插件                                                                    |
+| `listen`                            | `boolean \| Partial<FastifyListenOptions>` | 所有模块注册完成后开始监听；`true` 时使用 `PORT` / `HOST` 环境变量（默认 3000 / 0.0.0.0）            |
+| `allowCrossModuleCircularReference` | `boolean`                                  | 必须设为 `true` 才允许**跨模块**循环依赖（同模块内的始终允许）。`@default false`                     |
+| `registerGlobalMiddlewares`         | `ProviderOptions[]`                        | 只实例化注册、不全局生效的中间件（内置管道和 `JwtGuard` 会自动前置）                                 |
+| `useGlobalGuards`                   | `ProviderOptions[]`                        | 全局生效，按数组顺序：全局 → 控制器 → 方法                                                           |
+| `useGlobalInterceptors`             | `ProviderOptions[]`                        | 全局生效，按数组顺序：全局 → 控制器 → 方法 → 控制器 → 全局                                           |
+| `useGlobalPipes`                    | `ProviderOptions[]`                        | 全局生效，按数组顺序：全局 → 控制器 → 方法                                                           |
+| `useGlobalFilters`                  | `ProviderOptions[]`                        | 全局生效，作为最底层的过滤器                                                                         |
 
 ### `apply(app, options)`
 

@@ -39,7 +39,8 @@ export class JwtService {
    * - Allows setting/changing secret and default options
    */
   configure(options: JwtModuleOptions): void {
-    this.secret = options.secret;
+    // FIXED 与构造函数保持一致：空字符串 / 未提供都视为未设置，避免空密钥参与 HMAC 签名。
+    this.secret = options.secret || null;
     this.signOptions = this.validateSignOptions(options.signOptions ?? {});
     this.verifyOptions = options.verifyOptions ?? {};
   }
@@ -242,6 +243,10 @@ export class JwtService {
 
     // Decode payload
     const payload = JSON.parse(this.base64UrlDecode(encodedPayload)) as JwtPayload;
+    // FIXED 载荷必须是普通对象，拒绝数组 / null / 原始值，避免后续声明校验被绕过。
+    if (!_isObject<JwtPayload>(payload) || _isArray(payload)) {
+      throw new Error('Invalid JWT payload');
+    }
 
     // Verify claims
     const now = Math.floor(Date.now() / 1000);

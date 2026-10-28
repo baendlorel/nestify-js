@@ -12,6 +12,14 @@ import {
   nestify,
 } from '@core/index.js';
 
+/**
+ * `_throw` is a build-time macro that does not exist when sources run directly
+ * under vitest, so mirror the build behavior for the error assertions below.
+ */
+(globalThis as unknown as { _throw?: (message: string) => never })._throw ??= (message) => {
+  throw new Error(message);
+};
+
 describe('exception filter dispatch', () => {
   it('skips nonmatching filters and stops after the first response', async () => {
     const wrong = vi.fn();
@@ -185,6 +193,42 @@ describe('exception filter dispatch', () => {
         statusCode: 500,
         message: 'Internal server error',
       });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('reports an unregistered filter token with a clear message', async () => {
+    @Controller()
+    @UseFilters('not-registered')
+    class ControllerClass {
+      @Get()
+      handle() {
+        return { ok: true };
+      }
+    }
+    @Module({ controllers: [ControllerClass] })
+    class App {}
+
+    await expect(nestify(App)).rejects.toThrow("Filter token 'not-registered' must refer to a registered filter class");
+  });
+
+  it('does not write to the reply again when the response was already sent', async () => {
+    @Controller()
+    class ControllerClass {
+      @Get()
+      handle(_request: unknown, reply: { send: (body: unknown) => void }) {
+        reply.send({ first: true });
+        throw new Error('after send');
+      }
+    }
+    @Module({ controllers: [ControllerClass] })
+    class App {}
+    const app = await nestify(App);
+    try {
+      const response = await app.inject('/');
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ first: true });
     } finally {
       await app.close();
     }

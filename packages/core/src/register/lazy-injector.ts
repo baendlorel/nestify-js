@@ -24,6 +24,12 @@ export class Injector {
    */
   readonly instanceMap = new Map<InjectToken, any>();
 
+  /**
+   * Aliases declared by `useExisting` whose target was not created yet.
+   * - resolved in `apply()` so the declaration order does not matter
+   */
+  readonly pendingAliases: { token: InjectToken; target: InjectToken }[] = [];
+
   getProvide(opts: ProviderOptions) {
     // FIXED 统一走 `ph.getToken`：类 provider 使用构造函数身份作为 token。
     return ph.getToken(opts);
@@ -57,7 +63,8 @@ export class Injector {
 
   getDetail<T extends object>(token: InjectToken): { instance: T; cls: Constructor | null } {
     const instance = this.instanceMap.get(ph.getInjectToken(token)) as T;
-    const cls = (_getPrototypeOf(instance)?.constructor ?? null) as Constructor | null;
+    // FIXED token 未注册时不再对 undefined 调用 getPrototypeOf(会抛 TypeError)，交由调用方给出清晰错误。
+    const cls = (_isObject(instance) ? _getPrototypeOf(instance)?.constructor : null) as Constructor | null;
     return { instance, cls };
   }
 
@@ -121,7 +128,9 @@ export class Injector {
         const dependencyToken = ph.getInjectToken(existingToken);
         // FIXED 用 `Map.has` 判断目标是否存在，因此 useValue 的基本类型值也可以被别名引用。
         if (!this.instanceMap.has(dependencyToken)) {
-          _throw(`Cannot find existing provider: ${ph.getName(existingToken)}`);
+          // FIXED 目标声明在同级数组靠后位置时不再立即报错，先登记，在 `apply` 中统一解析。
+          this.pendingAliases.push({ token, target: dependencyToken });
+          return undefined;
         }
         const instance = this.instanceMap.get(dependencyToken);
         this.instanceMap.set(token, instance);
@@ -131,12 +140,43 @@ export class Injector {
   }
 
   /**
+   * Resolve every alias registered by `useExisting`.
+   * - Runs repeatedly so alias chains are resolved regardless of declaration order
+   * - Throws when a target provider does not exist at all
+   */
+  private resolvePendingAliases() {
+    let remaining = this.pendingAliases.splice(0, this.pendingAliases.length);
+    let reordered: boolean;
+
+    do {
+      reordered = false;
+      const next: typeof remaining = [];
+      for (let i = 0; i < remaining.length; i++) {
+        const { token, target } = remaining[i];
+        if (this.instanceMap.has(target)) {
+          this.instanceMap.set(token, this.instanceMap.get(target));
+          reordered = true;
+        } else {
+          next.push(remaining[i]);
+        }
+      }
+      remaining = next;
+    } while (remaining.length > 0 && reordered);
+
+    if (remaining.length > 0) {
+      _throw(`Cannot find existing provider: ${ph.getName(remaining[0].target)}`);
+    }
+  }
+
+  /**
    * 1. Set `app.log` as `APP_LOGGER`
    * 2. Assign injected fields as `injectList` recorded
    * 3. Bind cron jobs for all instances
    */
   apply(app: NestifyInstance) {
     const map = this.instanceMap;
+    // FIXED 注入前先解析 `useExisting` 别名，声明顺序不再影响别名能否生效。
+    this.resolvePendingAliases();
     // & Give default APP_LOGGER
     if (!map.has(APP_LOGGER)) {
       map.set(APP_LOGGER, app.log);

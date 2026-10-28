@@ -3,7 +3,7 @@ import type { FileUploadMeta, MultipartFile } from '@core/types/multipart.js';
 
 import { sym } from '@nestify-js/shared';
 import { NestifyError } from '@core/asserts/error.js';
-import { PayloadTooLargeException } from '@core/exceptions/index.js';
+import { BadRequestException, PayloadTooLargeException } from '@core/exceptions/index.js';
 import { ExecutionContext } from '@core/common/execution-context.js';
 import { metaGet } from '@core/register/meta.js';
 import { _PipeSet } from '@core/decorators/middlewares/pipe.js';
@@ -80,12 +80,18 @@ class PipeFile implements NestifyPipeLike {
         return [uploadedFile];
       }
     } catch (e) {
-      if (
-        e instanceof PayloadTooLargeException ||
-        (e instanceof Error && 'code' in e && e.code === 'FST_REQ_FILE_TOO_LARGE')
-      ) {
+      const code = e instanceof Error && 'code' in e ? String((e as { code: unknown }).code) : '';
+      if (e instanceof PayloadTooLargeException || code === 'FST_REQ_FILE_TOO_LARGE') {
         // FIXED 保留 413 语义，避免被通用上传错误包装为其他状态。
         throw new PayloadTooLargeException('File exceeds the configured size limit');
+      }
+      // FIXED 文件数量 / parts / 字段数量超限同样是 413，不再变成 500 并暴露插件原始消息。
+      if (code === 'FST_FILES_LIMIT' || code === 'FST_PARTS_LIMIT' || code === 'FST_FIELDS_LIMIT') {
+        throw new PayloadTooLargeException('Upload exceeds the configured count limits');
+      }
+      // FIXED 非法 multipart 请求体按 400 返回。
+      if (code === 'FST_INVALID_MULTIPART_CONTENT_TYPE') {
+        throw new BadRequestException('Invalid multipart content type');
       }
       if (e instanceof Error) {
         throw new NestifyError(`File upload failed: ${e.message}`);

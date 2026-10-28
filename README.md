@@ -499,19 +499,18 @@ const app = await nestify(AppModule, {
 });
 ```
 
-| Option                              | Type                                       | Description                                                                                                             |
-| ----------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `logger`                            | `FastifyServerOptions['logger']`           | Shortcut for `fastify.logger`                                                                                           |
-| `fastify`                           | `FastifyServerOptions`                     | Options passed to the fastify factory (`fastify(options)`)                                                              |
-| `ignoreTrailingSlash`               | `boolean`                                  | Treat `/path/` and `/path` as the same route. `@default true`                                                           |
-| `plugins`                           | `readonly [plugin, options?][]`            | Fastify plugins registered before modules are applied                                                                   |
-| `listen`                            | `boolean \| Partial<FastifyListenOptions>` | Start listening after all modules are registered; `true` uses `PORT` / `HOST` env vars (falling back to 3000 / 0.0.0.0) |
-| `allowCrossModuleCircularReference` | `boolean`                                  | Must be `true` to allow **cross-module** circular dependencies (same-module ones are always allowed). `@default false`  |
-| `registerGlobalMiddlewares`         | `ProviderOptions[]`                        | Middlewares to instantiate without applying globally (built-in pipes and `JwtGuard` are prepended automatically)        |
-| `useGlobalGuards`                   | `ProviderOptions[]`                        | Applied globally, in array order: global → controller → method                                                          |
-| `useGlobalInterceptors`             | `ProviderOptions[]`                        | Applied globally, in array order: global → controller → method → controller → global                                    |
-| `useGlobalPipes`                    | `ProviderOptions[]`                        | Applied globally, in array order: global → controller → method                                                          |
-| `useGlobalFilters`                  | `ProviderOptions[]`                        | Applied globally as the bottom filters                                                                                  |
+| Option                              | Type                                       | Description                                                                                                                |
+| ----------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `logger`                            | `FastifyServerOptions['logger']`           | Shortcut for `fastify.logger`                                                                                              |
+| `fastify`                           | `FastifyServerOptions`                     | Options passed to the fastify factory (`fastify(options)`); `routerOptions.ignoreTrailingSlash` is always forced to `true` |
+| `plugins`                           | `readonly [plugin, options?][]`            | Fastify plugins registered before modules are applied                                                                      |
+| `listen`                            | `boolean \| Partial<FastifyListenOptions>` | Start listening after all modules are registered; `true` uses `PORT` / `HOST` env vars (falling back to 3000 / 0.0.0.0)    |
+| `allowCrossModuleCircularReference` | `boolean`                                  | Must be `true` to allow **cross-module** circular dependencies (same-module ones are always allowed). `@default false`     |
+| `registerGlobalMiddlewares`         | `ProviderOptions[]`                        | Middlewares to instantiate without applying globally (built-in pipes and `JwtGuard` are prepended automatically)           |
+| `useGlobalGuards`                   | `ProviderOptions[]`                        | Applied globally, in array order: global → controller → method                                                             |
+| `useGlobalInterceptors`             | `ProviderOptions[]`                        | Applied globally, in array order: global → controller → method → controller → global                                       |
+| `useGlobalPipes`                    | `ProviderOptions[]`                        | Applied globally, in array order: global → controller → method                                                             |
+| `useGlobalFilters`                  | `ProviderOptions[]`                        | Applied globally as the bottom filters                                                                                     |
 
 ### `apply(app, options)`
 

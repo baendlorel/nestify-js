@@ -49,8 +49,8 @@ describe('request validation', () => {
     await apply(app, { rootModule: App });
     app.post('/native', { schema: { body: { type: 'object', required: ['name'] } } }, () => 'ok');
     try {
-      expect((await app.inject({ method: 'POST', url: '/body/', payload: {} })).statusCode).toBe(400);
-      expect((await app.inject({ method: 'POST', url: '/body/', payload: { name: 'ok' } })).statusCode).toBe(200);
+      expect((await app.inject({ method: 'POST', url: '/body', payload: {} })).statusCode).toBe(400);
+      expect((await app.inject({ method: 'POST', url: '/body', payload: { name: 'ok' } })).statusCode).toBe(200);
       expect((await app.inject({ method: 'POST', url: '/native', payload: {} })).statusCode).toBe(400);
     } finally {
       await app.close();
@@ -128,23 +128,23 @@ describe('request validation', () => {
     await apply(first, { rootModule: App });
     await apply(second, { rootModule: App });
     try {
-      expect((await first.inject({ method: 'POST', url: '/one/', payload: {} })).json()).toEqual({
+      expect((await first.inject({ method: 'POST', url: '/one', payload: {} })).json()).toEqual({
         source: 'a',
         part: 'querystring',
       });
-      expect((await second.inject({ method: 'POST', url: '/one/', payload: {} })).json()).toEqual({
+      expect((await second.inject({ method: 'POST', url: '/one', payload: {} })).json()).toEqual({
         source: 'b',
         part: 'querystring',
       });
-      expect((await first.inject({ method: 'POST', url: '/two/', payload: {} })).json()).toEqual({
+      expect((await first.inject({ method: 'POST', url: '/two', payload: {} })).json()).toEqual({
         source: 'a',
         part: 'querystring',
       });
       expect(compileA.mock.calls.map(([definition]) => [definition.url, definition.httpPart])).toEqual([
-        ['/one/', 'body'],
-        ['/one/', 'querystring'],
-        ['/two/', 'body'],
-        ['/two/', 'querystring'],
+        ['/one', 'body'],
+        ['/one', 'querystring'],
+        ['/two', 'body'],
+        ['/two', 'querystring'],
       ]);
       expect(compileB).toHaveBeenCalledTimes(2);
     } finally {
@@ -446,8 +446,8 @@ describe('request validation', () => {
     const app = createApp();
     await apply(app, { rootModule: App });
     try {
-      expect((await app.inject('/42/')).json()).toEqual({ id: 42 });
-      expect((await app.inject('/invalid/')).statusCode).toBe(400);
+      expect((await app.inject('/42')).json()).toEqual({ id: 42 });
+      expect((await app.inject('/invalid')).statusCode).toBe(400);
     } finally {
       await app.close();
     }

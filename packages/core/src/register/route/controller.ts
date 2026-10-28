@@ -34,7 +34,8 @@ function concatRoute(...routes: string[][]): string {
   if (flatRoutes.length === 0) {
     return '/';
   }
-  return '/' + flatRoutes.map((r) => `${r}/`).join('');
+  // FIXED 注册标准的无尾斜杠 URL（根路由为 `/`）；尾斜杠差异由 router 统一忽略，避免出现只注册 `/a/b/` 的情况。
+  return '/' + flatRoutes.join('/');
 }
 
 function getPipePart(app: NestifyInstance, pipeToken: PipeOptions['pipe']) {

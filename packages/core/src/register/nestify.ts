@@ -30,16 +30,9 @@ export interface NestifyBootOptions extends Partial<Omit<NestifyOptions, 'rootMo
 
   /**
    * Options passed to the fastify factory (`fastify(options)`)
+   * - `routerOptions.ignoreTrailingSlash` is always forced to `true`
    */
   fastify?: FastifyServerOptions;
-
-  /**
-   * Whether to treat `/path/` and `/path` as the same route.
-   * - `true` by default, so trailing slashes never cause a 404
-   *
-   * @default true
-   */
-  ignoreTrailingSlash?: boolean;
 
   /**
    * Fastify plugins registered before modules are applied
@@ -80,10 +73,10 @@ export interface NestifyBootOptions extends Partial<Omit<NestifyOptions, 'rootMo
  * ```
  */
 export async function nestify(rootModule: Constructor, opts: NestifyBootOptions = {}): Promise<NestifyInstance> {
-  const { fastify: serverOptions = {}, plugins, listen, logger, ignoreTrailingSlash = true, ...rest } = opts;
+  const { fastify: serverOptions = {}, plugins, listen, logger, ...rest } = opts;
 
-  // `ignoreTrailingSlash` moved into `routerOptions` in fastify@5;
-  // strip the deprecated top-level field to avoid FSTDEP022
+  // `ignoreTrailingSlash` moved into `routerOptions` in fastify@5.
+  // FIXED 尾斜杠一律忽略(NestJS 没有该开关)，不提供入参，也不允许通过 fastify 选项改回 strict。
   const { routerOptions, ...otherServerOptions } = serverOptions;
   const app = fastify({
     ...otherServerOptions,
@@ -91,7 +84,7 @@ export async function nestify(rootModule: Constructor, opts: NestifyBootOptions 
     ...(logger === undefined ? {} : { logger }),
     routerOptions: {
       ...routerOptions,
-      ignoreTrailingSlash,
+      ignoreTrailingSlash: true,
     },
   }) as unknown as NestifyInstance;
 

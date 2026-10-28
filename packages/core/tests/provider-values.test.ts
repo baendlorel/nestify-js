@@ -57,6 +57,32 @@ describe('provider values', () => {
     }
   });
 
+  it('resolves useExisting declared before its target', async () => {
+    @Module({
+      providers: [
+        { provide: 'late-alias', useExisting: 'late' },
+        { provide: 'late-late-alias', useExisting: 'late-alias' },
+        { provide: 'late', useValue: 'ok' },
+      ],
+    })
+    class AppModule {}
+
+    const app = await nestify(AppModule);
+    try {
+      expect(app.injector.get<any>('late-alias')).toBe('ok');
+      expect(app.injector.get<any>('late-late-alias')).toBe('ok');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects an alias whose target is not accessible', async () => {
+    @Module({ providers: [{ provide: 'missing-alias', useExisting: 'nothing' }] })
+    class AppModule {}
+
+    await expect(nestify(AppModule)).rejects.toThrow(/is not from current\/imported\/global module/);
+  });
+
   it('rejects an async factory instead of injecting a Promise', async () => {
     @Module({ providers: [{ provide: 'ready', useFactory: async () => 'ready' }] })
     class AppModule {}

@@ -98,6 +98,17 @@ describe('JwtService HS256 signatures', () => {
     );
   });
 
+  it('normalizes an empty secret in configure()', () => {
+    const jwt = new JwtService({ secret });
+    jwt.configure({ secret: '' });
+    expect(() => jwt.sign({ sub: 'user' })).toThrow('[Nestify] Secret is not set');
+  });
+
+  it('rejects a signed non-object payload', async () => {
+    const token = await standardToken({ alg: 'HS256' }, [1, 2, 3]);
+    expect(() => new JwtService({ secret }).verify(token)).toThrow('Invalid JWT payload');
+  });
+
   it('rejects unsupported algorithms in default and per-call signing options', () => {
     const jwt = new JwtService({ secret });
     expect(() =>

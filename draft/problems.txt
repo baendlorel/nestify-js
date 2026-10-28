@@ -110,10 +110,102 @@ NestJS 对照：允许同一 controller 声明在多个模块中（`RoutesResolv
 测试：packages/core/tests/http-method.test.ts
 实现：`HttpMethod(method)` 现在 `return registerRoute(method.toUpperCase())`，可用 `@(HttpMethod('HEAD')('/path'))` 声明自定义方法。
 
+第二轮校验（新增发现）
+========================
+范围：对第一轮 23 项逐条复核实现与测试，并补充清单外审计（路由、异常链、上传、JWT、调度）。
+结论：第一轮 23 项均有对应实现，未发现回退；下列 24-31 为新增缺陷（已修复），32-35 为设计限制（未修复，需版本决策）。
+
+中
+==
+
+✅ 24. 路由统一以尾斜杠注册，且 `ignoreTrailingSlash` 可被关闭，导致非根路由 404
+位置：packages/core/src/register/route/controller.ts:28、packages/core/src/register/route/controller.ts:37、packages/core/src/register/nestify.ts:73
+测试：packages/core/tests/http-method.test.ts
+复现：`nestify(App, { ignoreTrailingSlash: false })` 时 GET /probe/hello → 404，只有 /probe/hello/ 可访问。
+实现：按 NestJS 语义定案——尾斜杠始终忽略，且不提供开关：
+- `concatRoute` 不再为每个片段补 `/`（根路由仍为 `/`），注册的是标准 `/a/b`；
+- 删除 `NestifyBootOptions.ignoreTrailingSlash` 字段；
+- `nestify()` 无条件写入 `routerOptions.ignoreTrailingSlash: true`，即使调用方在 `fastify.routerOptions` 传 `false` 也会被覆盖；
+- README（中英）移除该选项，并在 `fastify` 选项处注明会被强制为 `true`。
+注意：直接用 `apply()` 搭配自建 `fastify()` 时，尾斜杠策略由该实例创建时的参数决定（Fastify 创建后不可修改）。
+
+✅ 25. `useExisting` 依赖声明顺序，目标声明在后时启动报错
+位置：packages/core/src/register/lazy-injector.ts:127、packages/core/src/register/lazy-injector.ts:178
+测试：packages/core/tests/provider-values.test.ts
+复现：providers 中把 `{ provide: 'alias', useExisting: 'late' }` 写在 `{ provide: 'late', ... }` 之前 → "Cannot find existing provider: late"。
+实现：`Injector` 新增 `pendingAliases` 队列。`useExisting` 先按 token 尝试立即解析；目标尚未创建时不抛错，而是记录 `{ token, target }`。`apply()` 开头调用 `resolvePendingAliases()`：反复扫描队列，把已存在的目标写回 `instanceMap`，直到某轮没有进展，因此支持 A→B→C 的别名链；仍有残留时抛 `Cannot find existing provider`。模块可达性由 `expectAccessible` 先行校验，越界别名会先报模块隔离错误。
+
+✅ 26. 上传文件数量 / parts / 字段数量超限返回 500，并泄露插件原始消息
+位置：packages/core/src/multipart/pipes/file.pipe.ts:85、packages/core/src/multipart/pipes/file.pipe.ts:88
+测试：packages/core/tests/multipart-integration.test.ts
+复现：`@Files({ limits: { files: 1 } })` 上传 2 个文件 → 500 "File upload failed: reach files limit"。
+实现：`PipeFile` 的 catch 先取出插件错误码再分流：`FST_REQ_FILE_TOO_LARGE`（及框架自身的 `PayloadTooLargeException`）→ 413「size limit」；`FST_FILES_LIMIT` / `FST_PARTS_LIMIT` / `FST_FIELDS_LIMIT` → 413「count limits」；`FST_INVALID_MULTIPART_CONTENT_TYPE` → 400。其余错误才包装为 `NestifyError('File upload failed: ...')`，插件原文不再以 500 泄露。
+
+✅ 27. 未注册的过滤器 token 抛出 `getPrototypeOf` 的 TypeError
+位置：packages/core/src/register/lazy-injector.ts:66、packages/core/src/register/route/middlewares/filter.ts:62
+测试：packages/core/tests/filter-integration.test.ts
+复现：`@UseFilters('not-registered')` → "Reflect.getPrototypeOf called on non-object"，无法定位问题。
+实现：`Injector.getDetail` 先判断取到的实例是否为对象，非对象直接返回 `cls = null`（此前会对 `undefined` 调 `getPrototypeOf` 抛 TypeError）。`createFilter` 随后用 `expectClass` 断言并输出 `Filter token 'x' must refer to a registered filter class`，可在启动期定位到具体 token。
+
+✅ 28. `JwtService.configure` 接受空密钥，与构造函数行为不一致
+位置：packages/core/src/auth/jwt.ts:42
+测试：packages/core/tests/jwt.test.ts
+复现：`configure({ secret: '' })` 后用空密钥签名成功；构造函数中空字符串却被视为未设置。
+实现：`configure()` 改为 `this.secret = options.secret || null`，与构造函数一致；空字符串 / 未提供都在 `createSignature` 处抛 `[Nestify] Secret is not set`，避免空密钥参与 HMAC。
+
+✅ 29. JWT 载荷不是对象时未拒绝
+位置：packages/core/src/auth/jwt.ts:246
+测试：packages/core/tests/jwt.test.ts
+复现：载荷为数组 / 原始值时 `verify` 直接返回，`exp` / `nbf` 等声明校验被跳过。
+实现：`verify()` 在 `JSON.parse` 之后增加 `_isObject(payload) && !_isArray(payload)` 校验，数组 / null / 字符串 / 数字一律抛 `Invalid JWT payload`，不会再跳过 `exp` / `nbf` / `aud` / `iss` 检查直接返回。
+
+✅ 30. `HttpMethod` 不校验方法名
+位置：packages/core/src/decorators/router/http-methods.ts:22
+测试：packages/core/tests/http-method.test.ts
+复现：`HttpMethod(123)` → "method.toUpperCase is not a function"；`HttpMethod('')` 直到 Fastify 注册阶段才报错。
+实现：`HttpMethod(method)` 先 `expectString`，再匹配 `/^[A-Za-z][A-Za-z0-9-]*$/`，最后才 `toUpperCase()` 交给 `registerRoute`；非字符串报 "HTTP method must be a string"，空串 / 含空格报 "Invalid HTTP method: ''"。
+
+✅ 31. 响应已发送后抛异常仍会二次写 reply
+位置：packages/core/src/register/route/middlewares/filter.ts:22
+测试：packages/core/tests/filter-integration.test.ts
+复现：handler 内 `reply.send()` 后再 throw，默认过滤器仍尝试 `status(500).send(...)`。
+实现：`createDefaultFilter` 开头判断 `reply.sent`，已发送时只对非 `HttpException` 记一条 error 日志并直接返回，不再调用 `status().send()`；未发送时保持原逻辑（HttpException 用自身状态，未知异常统一 500）。
+
+低 / 设计限制（未修复）
+==
+
+32. provider 实例是应用级而非模块级，同 token 的重复声明被静默忽略
+位置：packages/core/src/register/lazy-injector.ts:103、packages/core/src/register/module.ts:64
+现状：两个模块都声明 `{ provide: 'shared', useValue: ... }` 时只有先注册的生效，后一个被静默丢弃（NestJS 中 provider 按模块隔离，不会冲突）。
+影响：跨模块复用同一 token 会拿到非预期实例；写错配置也不会报错。
+说明：改为模块级作用域需要每个模块独立 injector，属架构调整，未在本轮改动。
+
+33. 字符串 / symbol 型 provider 无法被 exports
+位置：packages/core/src/register/expect-module.ts:153、packages/core/src/register/expect-module.ts:156
+现状：`exports` 必须是 `providers` 的子数组，且元素会被 `expectInjectable` 当类校验；导出 `{ provide: 'X', useValue }` 报 "Target is not a class"。
+影响：非类 token 只能经由全局模块共享，跨模块传递配置对象不可行。
+说明：需把 `exports` 元素判定从“类”放宽到“token”，同时保留 subarray 校验。
+
+34. `@ApiSchema` 不能携带请求 schema
+位置：packages/core/src/register/route/controller.ts:134、packages/core/src/register/route/controller.ts:135
+现状：`rejectRouteRequestSchemas` 同时拒绝 `Opt.schema` 与 `ApiSchema` 中的 body / params / querystring，校验只能走管道。
+影响：习惯用 `@ApiSchema` 写 OpenAPI 请求体的项目会在启动期失败。
+说明：这是“校验只走管道”的刻意设计，建议补文档说明。
+
+35. `startCronJob` / `stopCronJob` 在 uid 重复时只作用于第一个任务
+位置：packages/core/src/schedule/cron.ts:91、packages/core/src/schedule/cron.ts:100
+现状：`findJob(uid)` 使用 `Array.find`，重复 `uid` 时其余任务不受控。
+影响：配置错误难以发现，但不构成越权。
+说明：可在注册期校验 uid 唯一，属增强项。
+
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests：19 个文件、145 项通过。
-- cron 调度已改为依赖 `node-cron@^4.6.0`（`createTask` / `start` / `stop` / `destroy` / `getNextRun`），移除 `cron-parser` 依赖与手写 timer 逻辑。
-- 临时针对性复现：21 项通过；测试文件已删除。复现测试对源码运行时缺少构建宏的 _throw 提供了本地测试替身，不代表已修复该环境问题。
-- 额外尝试包含根目录 tests 和 packages/nestify/tests 的测试：部分套件因根目录无法解析 fastify、源码运行时 _throw 未定义或旧测试引用已不存在的 injector 而失败；因此不能宣称完整集成测试通过。
-- 本清单不修改框架实现，未对所有输入组合或生产部署配置作穷举。
+- pnpm exec vitest run packages/core/tests：19 个文件、154 项通过（新增 9 项回归用例）。
+- pnpm -C packages/core run check（tsc --noEmit）：通过。
+- 第一轮 23 项逐条复核：实现均在位；第 11 项仍为有意设计（factory 按声明顺序取依赖）。
+- 新增回归用例：http-method（方法名校验、尾斜杠强制等价）、provider-values（别名声明顺序 / 别名越界）、multipart-integration（文件数量超限 413）、filter-integration（未注册过滤器、响应已发送）、jwt（空密钥、非对象载荷）。
+- 尾斜杠策略：`concatRoute` 注册无尾斜杠 URL；`nestify()` 强制 `routerOptions.ignoreTrailingSlash: true`，且不再暴露开关（与 NestJS 一致），`/a` 与 `/a/` 等价。相关既有测试 URL 已由 `/xxx/` 改为 `/xxx`。
+- cron 调度依赖 `node-cron@^4.6.0`（`createTask` / `start` / `stop` / `destroy` / `getNextRun`）。
+- 临时探针测试文件已删除；未对生产部署配置、超大输入或并发场景作穷举。
+- 根目录 tests 与 packages/nestify/tests 的既有失败（缺 fastify、源码运行时 _throw 未定义）与本轮改动无关。
+
