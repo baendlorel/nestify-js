@@ -88,3 +88,7 @@ export { BasicTransformer, basicTransformer } from './pipes/basic-transformer.js
 
 // Cron jobs
 export { Cron, CronExpressions } from './schedule/cron.js';
+
+// Rate limiting
+export { Throttle, ThrottleGuard } from './decorators/misc/throttle.js';
+export type { ThrottleOptions, ThrottleInput } from './decorators/misc/throttle.js';

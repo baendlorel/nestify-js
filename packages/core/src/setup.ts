@@ -6,6 +6,7 @@ import { PipeIp } from './pipes/ip.pipe.js';
 import { PipeQuery } from './pipes/query.pipe.js';
 import { PipeRaw } from './pipes/raw.pipe.js';
 import { JwtGuard } from './auth/jwt.guard.js';
+import { ThrottleGuard } from './decorators/misc/throttle.js';
 
 /**
  * Built-in middlewares that are prepended to `registerGlobalMiddlewares`
@@ -13,4 +14,12 @@ import { JwtGuard } from './auth/jwt.guard.js';
  * - Only registered (instantiated), no global effect
  * - so they can be used via `@UsePipes(...)` / `@UseGuards(...)` directly
  */
-export const BuiltinMiddlewares: ProviderOptions[] = [PipeBody, PipeParams, PipeIp, PipeQuery, PipeRaw, JwtGuard()];
+export const BuiltinMiddlewares: ProviderOptions[] = [
+  PipeBody,
+  PipeParams,
+  PipeIp,
+  PipeQuery,
+  PipeRaw,
+  JwtGuard(),
+  ThrottleGuard,
+];
