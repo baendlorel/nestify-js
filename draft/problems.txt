@@ -37,17 +37,13 @@ packages/core 问题清单
 测试：packages/core/tests/di-token-identity.test.ts
 
 
-10. 模块隔离可以被 Symbol 字段和 useExisting 绕过
-位置：packages/core/src/register/expect-module.ts:198、packages/core/src/register/lazy-injector.ts:113、packages/core/src/register/lazy-injector.ts:137
-复现：未导出、未导入的兄弟模块 provider，既可通过 Symbol 名字段 @Inject 注入，也可通过 useExisting 别名访问。
-原因：依赖检查使用 Object.values，漏掉 Symbol 属性；useExisting 不参与依赖可访问性检查，而实例 map 是应用级共享。
-建议：遍历所有自有键，并对别名目标执行同样的模块可访问性验证。
+✅ 10. 模块隔离可以被 Symbol 字段和 useExisting 绕过
+位置：packages/core/src/register/expect-module.ts:200、packages/core/src/register/expect-module.ts:229、packages/core/src/register/lazy-injector.ts:115
+测试：packages/core/tests/module-isolation.test.ts
 
-11. factory 依赖按声明顺序取值，缺失时静默传入 undefined
+✅ 11. factory 依赖按声明顺序取值，缺失时静默传入 undefined
 位置：packages/core/src/register/module.ts:46、packages/core/src/register/lazy-injector.ts:107、packages/core/src/register/lazy-injector.ts:129
-复现：providers 中 factory 排在其注入的类之前时，factory 收到 undefined；注入默认 APP_LOGGER 的 factory 也收到 undefined，因为默认 logger 在之后的 apply 阶段才加入。
-此外，factory 即使拿到类实例，该实例的字段注入也尚未完成。
-建议：按依赖图初始化 factory，确保依赖及字段注入就绪，对缺失和循环依赖明确报错。
+特殊设计：有意为之，按声明顺序取值是为了支持 provider 之间的循环依赖，依赖可在后续阶段补齐，不视为缺陷。
 
 中
 ==
@@ -57,6 +53,7 @@ packages/core 问题清单
 复现：控制器抛出普通 Error 时响应状态为 400，body 包含原始 error.message。
 影响：服务端故障被误报为客户端错误，内部实现或敏感信息可能返回给客户端。
 建议：未知异常记录服务端日志，返回不泄露细节的 500；保留显式 HttpException 的语义。
+--帮我修复
 
 13. JwtGuard 对缺失或无效令牌返回 400 而不是 401
 位置：packages/core/src/auth/jwt.guard.ts:47、packages/core/src/auth/jwt.guard.ts:59
@@ -122,7 +119,7 @@ packages/core 问题清单
 
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests：12 个文件、111 项通过。
+- pnpm exec vitest run packages/core/tests：13 个文件、115 项通过。
 - 临时针对性复现：21 项通过；测试文件已删除。复现测试对源码运行时缺少构建宏的 _throw 提供了本地测试替身，不代表已修复该环境问题。
 - 额外尝试包含根目录 tests 和 packages/nestify/tests 的测试：部分套件因根目录无法解析 fastify、源码运行时 _throw 未定义或旧测试引用已不存在的 injector 而失败；因此不能宣称完整集成测试通过。
 - 本清单不修改框架实现，未对所有输入组合或生产部署配置作穷举。

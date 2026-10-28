@@ -1,7 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { InjectMetadata, InjectToken, ProviderOptions } from '@core/types/injection.js';
 import { inspect } from 'node:util';
-import { sym, _values, _isArray, _isConstructable, _isObject, _isPathNode, type Constructor } from '@nestify-js/shared';
+import {
+  sym,
+  _isArray,
+  _isConstructable,
+  _isObject,
+  _isPathNode,
+  _ownKeys,
+  type Constructor,
+  type SSKey,
+} from '@nestify-js/shared';
 
 import { RouteConfig } from '@core/types/index.js';
 import { toModuleClass } from '@core/common/utils.js';
@@ -190,19 +199,16 @@ export function clearExpectCache() {
 
 function getDependencyTokens(options: ProviderOptions): InjectToken[] | null {
   if (_isConstructable(options)) {
-    const injections = metaGetInject(options);
-    if (!_isObject(injections)) {
-      return null;
-    }
-    return _values(injections).map((injection) => ph.getInjectToken(injection.dependency));
+    return getClassDependencyTokens(options);
   }
 
   if ('useClass' in options) {
-    const injections = metaGetInject(options.useClass);
-    if (!_isObject(injections)) {
-      return null;
-    }
-    return _values(injections).map((injection) => ph.getInjectToken(injection.dependency));
+    return getClassDependencyTokens(options.useClass);
+  }
+
+  // FIXED `useExisting` 的别名目标现在也参与模块可访问性检查，避免借别名读取未导出/未导入的 provider。
+  if ('useExisting' in options) {
+    return [ph.getInjectToken(options.useExisting)];
   }
 
   if ('inject' in options) {
@@ -215,4 +221,25 @@ function getDependencyTokens(options: ProviderOptions): InjectToken[] | null {
   }
 
   return null;
+}
+
+/**
+ * Collect the dependency tokens declared by `@Inject` fields of a class.
+ */
+function getClassDependencyTokens(cls: Constructor): InjectToken[] | null {
+  const injections = metaGetInject(cls);
+  if (!_isObject<Record<SSKey, InjectMetadata>>(injections)) {
+    return null;
+  }
+
+  // FIXED 改用 Reflect.ownKeys 遍历全部自有键，Symbol 命名的 `@Inject` 字段不再被漏检（原先的 Object.values 会跳过它们）。
+  const keys = _ownKeys(injections);
+  const tokens: InjectToken[] = [];
+  for (let i = 0; i < keys.length; i++) {
+    const injection = injections[keys[i]];
+    if (_isObject<InjectMetadata>(injection)) {
+      tokens.push(ph.getInjectToken(injection.dependency));
+    }
+  }
+  return tokens;
 }
