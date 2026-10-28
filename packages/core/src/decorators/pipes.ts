@@ -31,7 +31,7 @@ function mergeSchema(
  * @param input The pipe will validate `body` against this schema, using `validatorCompiler`(if it is provided too)
  * - Only the schema of the **FIRST** `PipeOption` will be mounted to `schema.body` to provide swagger info
  * @param ok will be set to `{ response: { 200: okSchema } }`
- * @param other The rest schemas like we set in `fastify.route({ schema })`
+ * @param other Additional schema such as `response`; unrelated request schemas are rejected.
  */
 export function Body(input?: PipeSchema, ok?: PipeSchema, other?: PipeFullSchema) {
   return UsePipes({ pipe: PipeBody, schema: mergeSchema('body', input, ok, other) });
@@ -44,7 +44,7 @@ export function Body(input?: PipeSchema, ok?: PipeSchema, other?: PipeFullSchema
  * @param input The pipe will validate `params` against this schema, using `validatorCompiler`(if it is provided too)
  * - Only the schema of the **FIRST** `PipeOption` will be mounted to `schema.params` to provide swagger info
  * @param ok will be set to `{ response: { 200: okSchema } }`
- * @param other The rest schemas like we set in `fastify.route({ schema })`
+ * @param other Additional schema such as `response`; unrelated request schemas are rejected.
  */
 export function Params(input?: PipeSchema, ok?: PipeSchema, other?: PipeFullSchema) {
   return UsePipes({ pipe: PipeParams, schema: mergeSchema('params', input, ok, other) });
@@ -57,7 +57,7 @@ export function Params(input?: PipeSchema, ok?: PipeSchema, other?: PipeFullSche
  * @param input The pipe will validate `query` against this schema, using `validatorCompiler`(if it is provided too)
  * - Only the schema of the **FIRST** `PipeOption` will be mounted to `schema.querystring` to provide swagger info
  * @param ok will be set to `{ response: { 200: okSchema } }`
- * @param other The rest schemas like we set in `fastify.route({ schema })`
+ * @param other Additional schema such as `response`; unrelated request schemas are rejected.
  */
 export function Query(input?: PipeSchema, ok?: PipeSchema, other?: PipeFullSchema) {
   return UsePipes({ pipe: PipeQuery, schema: mergeSchema('querystring', input, ok, other) });

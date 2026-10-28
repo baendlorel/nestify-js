@@ -22,8 +22,6 @@ export class ExecutionContext<CT extends keyof ArgsTypeMap = 'http'> {
     private readonly controller: Constructor,
     private readonly contextHandler: AnyFunction,
     readonly validatorCompiler?: FastifyInstance['validatorCompiler'],
-    readonly attachValidation = false,
-    readonly deferredValidationPart?: 'body' | 'params' | 'querystring',
   ) {}
 
   /**

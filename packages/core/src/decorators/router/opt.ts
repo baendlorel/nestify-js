@@ -7,6 +7,8 @@ import { metaSetOpt } from '@core/register/meta.js';
 /**
  * Set route options
  * @param opts Fastify's RouteShorthandOptions
+ * Request schemas in `opts.schema` are rejected; use Nestify pipes instead.
+ * `attachValidation` is ignored for Nestify routes.
  * @returns
  */
 export function Opt<T extends RouteOptType>(opts: T) {

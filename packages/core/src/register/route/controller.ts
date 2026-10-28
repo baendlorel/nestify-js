@@ -21,6 +21,8 @@ import { createInterceptor } from './middlewares/interceptor.js';
 import { PipeBody } from '@core/pipes/body.pipe.js';
 import { PipeParams } from '@core/pipes/params.pipe.js';
 import { PipeQuery } from '@core/pipes/query.pipe.js';
+import { NestifyError } from '@core/asserts/error.js';
+import type { PipeFullSchema, PipeOptions } from '@core/types/middleware.js';
 
 function concatRoute(...routes: string[][]): string {
   const flatRoutes = routes
@@ -34,17 +36,47 @@ function concatRoute(...routes: string[][]): string {
   return '/' + flatRoutes.map((r) => `${r}/`).join('');
 }
 
-function getPipePart(pipeToken: unknown) {
-  if (pipeToken === PipeBody || pipeToken === PipeBody.name) {
+function getPipePart(app: NestifyInstance, pipeToken: PipeOptions['pipe']) {
+  const instance = app.injector.get(pipeToken);
+  if (instance instanceof PipeBody) {
     return 'body';
   }
-  if (pipeToken === PipeParams || pipeToken === PipeParams.name) {
+  if (instance instanceof PipeParams) {
     return 'params';
   }
-  if (pipeToken === PipeQuery || pipeToken === PipeQuery.name) {
+  if (instance instanceof PipeQuery) {
     return 'querystring';
   }
   return undefined;
+}
+
+const requestParts = ['body', 'params', 'querystring', 'headers'] as const;
+
+function assertPipeSchemas(app: NestifyInstance, pipes: PipeOptions[], route: string) {
+  for (const { pipe, schema } of pipes) {
+    if (!schema) {
+      continue;
+    }
+    const part = getPipePart(app, pipe);
+    for (const key of requestParts) {
+      if (schema[key] !== undefined && key !== part) {
+        throw new NestifyError(
+          `Route ${route}: schema.${key} is not validated by ${String(pipe)}; use the corresponding built-in pipe`,
+        );
+      }
+    }
+  }
+}
+
+function rejectRouteRequestSchemas(schema: PipeFullSchema | undefined, route: string) {
+  if (!schema) {
+    return;
+  }
+  for (const key of requestParts) {
+    if (schema[key] !== undefined) {
+      throw new NestifyError(`Route ${route}: schema.${key} in route options is not supported; use a Nestify pipe`);
+    }
+  }
 }
 
 const registeredControllers = new WeakMap<NestifyInstance, Set<Constructor>>();
@@ -83,61 +115,30 @@ export function registerController(app: NestifyInstance, controller: Constructor
     const interceptor = createInterceptor(app, getInterceptors(field));
     const guard = createGuard(app, getGuards(field));
     const filter = createFilter(app, getFilters(field));
-    const pipe = createPipe(app, getPipes(field));
+    const pipes = getPipes(field);
+    assertPipeSchemas(app, pipes, url);
+    rejectRouteRequestSchemas(opts.schema, url);
+    rejectRouteRequestSchemas(ApiSchema, url);
+    const pipe = createPipe(app, pipes);
 
     const firstMethodPipe = metaGetFirstMethodPipe(controller, field);
     const firstMethodPipeSchema = firstMethodPipe?.schema;
-    opts.schema = toAssigned(opts.schema, ApiSchema, firstMethodPipeSchema); // Here schema is for swagger
-
-    // FIXED 内置方法级管道的自定义校验延期到管道执行：既避免同一校验执行两次，
-    // 也避免 Fastify 丢弃编译器返回的 false、0 等假值转换结果。
-    // 调用方显式启用 attachValidation 时保留 Fastify 自行处理校验错误的行为。
-    const originalCompiler = opts.validatorCompiler ?? app.validatorCompiler;
-
-    const pipePart = getPipePart(firstMethodPipe?.pipe);
-
-    const deferredValidationPart =
-      originalCompiler && !opts.attachValidation && pipePart && firstMethodPipeSchema?.[pipePart] !== undefined
-        ? pipePart
-        : undefined;
-
-    const validatorCompiler = deferredValidationPart
-      ? (definition: Parameters<NonNullable<typeof originalCompiler>>[0]) => {
-          // FIXED 仅跳过将由管道校验的同一个 schema；其他请求部分仍使用原编译器。
-          if (
-            definition.httpPart === deferredValidationPart &&
-            definition.schema === firstMethodPipeSchema?.[deferredValidationPart]
-          ) {
-            return () => true;
-          }
-          const compiler = opts.validatorCompiler ?? app.validatorCompiler;
-          if (!compiler) {
-            throw new Error('Validator compiler is no longer available');
-          }
-          return compiler(definition);
-        }
-      : opts.validatorCompiler;
+    const schema = toAssigned(opts.schema, ApiSchema, firstMethodPipeSchema);
 
     // Pass the original method (with correct name) and instance for 'this' binding
-    const handler = createHandler(
-      controller,
-      origin,
-      { interceptor, guard, filter, pipe },
-      opts.attachValidation === true,
-      opts.validatorCompiler,
-      deferredValidationPart,
-    );
+    const handler = createHandler(controller, origin, { interceptor, guard, filter, pipe }, opts.validatorCompiler);
 
     console.log(`Registered - ${url} (${method.toUpperCase()})`);
 
+    const { attachValidation: _attachValidation, ...routeOptions } = opts;
     app.route({
-      ...opts,
+      ...routeOptions,
+      schema,
       method,
       url,
       handler,
-      // FIXED 将 Fastify 校验错误附到请求，供后续 Nestify 流程处理。
-      attachValidation: true,
-      ...(validatorCompiler ? { validatorCompiler } : {}),
+      // FIXED 只对 Nestify 路由跳过 Fastify 请求校验，实际校验在管道执行。
+      validatorCompiler: () => () => true,
     });
   });
 }

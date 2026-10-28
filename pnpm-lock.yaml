@@ -47,6 +47,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@fastify/ajv-compiler':
+        specifier: ^4.0.5
+        version: 4.0.5
       '@nestify-js/shared':
         specifier: workspace:^*
         version: link:../shared

@@ -1,16 +1,24 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { FastifySchemaValidationError, FastifyValidationResult as Validator } from 'fastify/types/schema.js';
+import AjvCompiler from '@fastify/ajv-compiler';
 import { sym, promiseTry, _isFunction, _isObject, _isArray } from '@nestify-js/shared';
 import type { PipeSchema, PipeFullSchema } from '@core/types/middleware.js';
 import { ExecutionContext } from '@core/common/execution-context.js';
 import { BadRequestException } from '@core/exceptions/index.js';
+import { NestifyError } from '@core/asserts/error.js';
 
 export type NestifyHttpPart = 'body' | 'params' | 'query' | 'ip' | 'raw';
 
 type ValidatorReturn = boolean | { value?: unknown; error?: Error | FastifySchemaValidationError[] };
 type Compiler = NonNullable<FastifyInstance['validatorCompiler']>;
+type ExternalSchema = Parameters<ReturnType<typeof AjvCompiler>>[0][string];
+
+function isExternalSchema(schema: unknown): schema is ExternalSchema {
+  return typeof schema === 'boolean' || (typeof schema === 'object' && schema !== null);
+}
 
 class BasicTransformer {
+  private readonly defaultCompilers = new WeakMap<FastifyInstance, Compiler>();
   // FIXED 内置管道共享此 transformer；按应用、编译器、路由、方法及请求部分隔离缓存，
   // 避免复用其他应用或路由的校验规则，同时使用弱引用避免阻止应用和路由回收。
   private readonly validators = new WeakMap<
@@ -23,15 +31,26 @@ class BasicTransformer {
     req: FastifyRequest,
     part: 'body' | 'params' | 'querystring',
     schema: PipeSchema,
-  ): Validator | null {
+  ): Validator {
     let compiler = context.validatorCompiler ?? req.server.validatorCompiler;
-    if (!_isFunction(compiler) && _isFunction(req.compileValidationSchema)) {
-      // FIXED Fastify 的默认编译器可能尚未初始化；编译空 schema 使其按应用配置惰性创建。
-      req.compileValidationSchema({}, part);
-      compiler = req.server.validatorCompiler;
-    }
     if (!_isFunction(compiler)) {
-      return null;
+      compiler = this.defaultCompilers.get(req.server);
+      if (!compiler) {
+        // FIXED 不使用路由上的占位编译器，独立编译器按应用隔离并加载共享 schema。
+        if (!_isFunction(req.server.getSchemas)) {
+          throw new NestifyError('Cannot initialize the default validator without Fastify schemas');
+        }
+        const schemas: Record<string, ExternalSchema> = Object.create(null);
+        for (const [key, schema] of Object.entries(req.server.getSchemas())) {
+          if (!isExternalSchema(schema)) {
+            throw new NestifyError(`Invalid shared schema: ${key}`);
+          }
+          schemas[key] = schema;
+        }
+        const build = AjvCompiler()(schemas, { customOptions: {} });
+        compiler = (definition) => build(definition);
+        this.defaultCompilers.set(req.server, compiler);
+      }
     }
 
     const route = req.routeOptions;
@@ -127,23 +146,7 @@ class BasicTransformer {
       return args;
     }
     const httpPart = part === 'query' ? 'querystring' : part;
-    // FIXED 避免重复执行 Fastify 已完成的校验，只在以下条件同时成立时直接使用请求数据：
-    // 没有校验错误或调用方选择自行处理错误；该部分未延期到管道；
-    // 当前 schema 与路由 schema 相同，且 Fastify 确实为该部分编译了校验函数。
-    // 否则仍需在管道中校验，例如控制器级管道的独立 schema 或延期的自定义编译器。
-    if (
-      (!req.validationError || context.attachValidation) &&
-      context.deferredValidationPart !== httpPart &&
-      req.routeOptions?.schema?.[httpPart] === neededSchema &&
-      _isFunction(req.getValidationFunction) &&
-      req.getValidationFunction(httpPart)
-    ) {
-      return args;
-    }
     const validator = this.getValidator(context, req, httpPart, neededSchema);
-    if (!validator) {
-      return args;
-    }
 
     const rawResult = await promiseTry(validator, null, data);
     const result = this.handleResult(validator, rawResult);

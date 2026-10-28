@@ -7,19 +7,24 @@ import {
   Controller,
   ExecutionContext,
   Filter,
+  Get,
   Guard,
+  Interceptor,
   Module,
   NestifyFilter,
   NestifyGuard,
+  NestifyInterceptor,
+  NestifyInterceptorNextHandler,
   Opt,
+  Params,
   PipeBody,
   PipeQuery,
   Post,
+  Query,
   UseFilters,
   UseGuards,
   UsePipes,
   type NestifyInstance,
-  type NestifyReply,
 } from '@core/index.js';
 import { BadRequestException } from '@core/exceptions/index.js';
 
@@ -28,7 +33,7 @@ function createApp() {
 }
 
 describe('request validation', () => {
-  it('uses Fastify validation for Nestify and later native routes', async () => {
+  it('validates Nestify pipes without disabling validation for native routes', async () => {
     @Controller()
     class ControllerClass {
       @Post('body')
@@ -224,7 +229,7 @@ describe('request validation', () => {
     }
   });
 
-  it('uses the compiler currently configured on the app for a deferred pipe', async () => {
+  it('uses the compiler currently configured on the app for a pipe', async () => {
     @Controller()
     class ControllerClass {
       @Post()
@@ -272,7 +277,7 @@ describe('request validation', () => {
     }
   });
 
-  it('still validates non-pipe schemas with the custom compiler', async () => {
+  it('rejects request schemas that the built-in pipe does not validate', async () => {
     @Controller()
     class ControllerClass {
       @Post()
@@ -284,16 +289,8 @@ describe('request validation', () => {
     @Module({ controllers: [ControllerClass] })
     class App {}
     const app = createApp();
-    app.setValidatorCompiler(
-      ({ httpPart }) =>
-        () =>
-          httpPart === 'headers' ? { error: new Error('invalid headers') } : true,
-    );
-    await apply(app, { rootModule: App });
     try {
-      const response = await app.inject({ method: 'POST', url: '/', payload: {} });
-      expect(response.statusCode).toBe(400);
-      expect(response.json().message).toContain('invalid headers');
+      await expect(apply(app, { rootModule: App })).rejects.toThrow(/schema\.headers.*not validated/);
     } finally {
       await app.close();
     }
@@ -340,14 +337,14 @@ describe('request validation', () => {
     }
   });
 
-  it('preserves explicit attachValidation so a handler can inspect the validation error', async () => {
+  it('ignores attachValidation and still rejects invalid pipe input', async () => {
     @Controller()
     class ControllerClass {
       @Post()
       @Opt({ attachValidation: true })
       @Body({ type: 'object', required: ['name'] })
-      handle(_body: unknown, reply: NestifyReply) {
-        return { invalid: Boolean(reply.request.validationError) };
+      handle() {
+        return 'unreachable';
       }
     }
     @Module({ controllers: [ControllerClass] })
@@ -356,10 +353,190 @@ describe('request validation', () => {
     await apply(app, { rootModule: App });
     try {
       const response = await app.inject({ method: 'POST', url: '/', payload: {} });
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ invalid: true });
+      expect(response.statusCode).toBe(400);
     } finally {
       await app.close();
+    }
+  });
+
+  it('runs guards and interceptors before default validation and transformation', async () => {
+    const events: string[] = [];
+    @Guard()
+    class GuardClass extends NestifyGuard {
+      canActivate(context: ExecutionContext) {
+        const request = context.switchToHttp().getRequest<{ query: { value: unknown } }>();
+        events.push(`guard:${typeof request.query.value}`);
+        return true;
+      }
+    }
+    @Interceptor()
+    class InterceptorClass extends NestifyInterceptor {
+      intercept(_context: ExecutionContext, next: NestifyInterceptorNextHandler) {
+        events.push('interceptor');
+        return next;
+      }
+    }
+    @Controller()
+    @UseGuards(GuardClass)
+    class ControllerClass {
+      @Get()
+      @Query({ type: 'object', properties: { value: { type: 'integer' } }, required: ['value'] })
+      handle(query: { value: number }) {
+        events.push(`handler:${typeof query.value}`);
+        return query;
+      }
+    }
+    @Module({ controllers: [ControllerClass], providers: [GuardClass] })
+    class App {}
+    const app = createApp();
+    await apply(app, { rootModule: App, useGlobalInterceptors: [InterceptorClass] });
+    try {
+      const valid = await app.inject('/?value=7');
+      expect(valid.json()).toEqual({ value: 7 });
+      expect(events).toEqual(['guard:string', 'interceptor', 'handler:number']);
+      events.length = 0;
+      expect((await app.inject('/?value=invalid')).statusCode).toBe(400);
+      expect(events).toEqual(['guard:string', 'interceptor']);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('does not execute a validator when a guard denies the request', async () => {
+    const validate = vi.fn(() => true);
+    @Guard()
+    class DenyGuard extends NestifyGuard {
+      canActivate() {
+        return false;
+      }
+    }
+    @Controller()
+    @UseGuards(DenyGuard)
+    class ControllerClass {
+      @Post()
+      @Body({ type: 'object' })
+      handle() {
+        return 'unreachable';
+      }
+    }
+    @Module({ controllers: [ControllerClass], providers: [DenyGuard] })
+    class App {}
+    const app = createApp();
+    app.setValidatorCompiler(() => validate);
+    await apply(app, { rootModule: App });
+    try {
+      expect((await app.inject({ method: 'POST', url: '/', payload: {} })).statusCode).toBe(403);
+      expect(validate).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('validates and transforms route parameters in the built-in pipe', async () => {
+    @Controller()
+    class ControllerClass {
+      @Get(':id')
+      @Params({ type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] })
+      handle(params: { id: number }) {
+        return params;
+      }
+    }
+    @Module({ controllers: [ControllerClass] })
+    class App {}
+    const app = createApp();
+    await apply(app, { rootModule: App });
+    try {
+      expect((await app.inject('/42/')).json()).toEqual({ id: 42 });
+      expect((await app.inject('/invalid/')).statusCode).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('preserves Fastify response serialization schemas', async () => {
+    @Controller()
+    class ControllerClass {
+      @Post()
+      @Body({ type: 'object' }, { type: 'object', properties: { ok: { type: 'string' } }, required: ['ok'] })
+      handle() {
+        return { ok: 'yes', hidden: 'not serialized' };
+      }
+    }
+    @Module({ controllers: [ControllerClass] })
+    class App {}
+    const app = createApp();
+    await apply(app, { rootModule: App });
+    try {
+      expect((await app.inject({ method: 'POST', url: '/', payload: {} })).json()).toEqual({ ok: 'yes' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects request schemas in Fastify route options', async () => {
+    @Controller()
+    class ControllerClass {
+      @Post()
+      @Opt({ schema: { body: { type: 'object' } } })
+      handle() {
+        return 'unreachable';
+      }
+    }
+    @Module({ controllers: [ControllerClass] })
+    class App {}
+    const app = createApp();
+    try {
+      await expect(apply(app, { rootModule: App })).rejects.toThrow(/schema\.body in route options/);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('loads shared Fastify schemas into the independent compiler', async () => {
+    @Controller()
+    class ControllerClass {
+      @Post()
+      @Body({ $ref: 'person#' })
+      handle(body: unknown) {
+        return body;
+      }
+    }
+    @Module({ controllers: [ControllerClass] })
+    class App {}
+    const app = createApp();
+    app.addSchema({ $id: 'person', type: 'object', required: ['name'] });
+    await apply(app, { rootModule: App });
+    try {
+      expect((await app.inject({ method: 'POST', url: '/', payload: {} })).statusCode).toBe(400);
+      expect((await app.inject({ method: 'POST', url: '/', payload: { name: 'ok' } })).statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('isolates independent default compilers and their shared schemas between apps', async () => {
+    @Controller()
+    class ControllerClass {
+      @Post()
+      @Body({ $ref: 'person#' })
+      handle(body: unknown) {
+        return body;
+      }
+    }
+    @Module({ controllers: [ControllerClass] })
+    class App {}
+    const first = createApp();
+    const second = createApp();
+    first.addSchema({ $id: 'person', type: 'object', required: ['name'] });
+    second.addSchema({ $id: 'person', type: 'object', required: ['email'] });
+    await apply(first, { rootModule: App });
+    await apply(second, { rootModule: App });
+    try {
+      expect((await first.inject({ method: 'POST', url: '/', payload: { name: 'ok' } })).statusCode).toBe(200);
+      expect((await second.inject({ method: 'POST', url: '/', payload: { name: 'ok' } })).statusCode).toBe(400);
+      expect((await second.inject({ method: 'POST', url: '/', payload: { email: 'ok' } })).statusCode).toBe(200);
+    } finally {
+      await Promise.all([first.close(), second.close()]);
     }
   });
 

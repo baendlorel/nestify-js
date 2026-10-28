@@ -39,9 +39,9 @@ export type RouteApiSchema = Omit<FastifySchema, keyof PipeFullSchema>;
 
 export interface PipeOptions {
   /**
-   * Validation schema
-   * - if pipe class is not given, will try to use global pipe
-   *   - will be ignored when global pipe is not set
+   * Schema passed to the pipe. Request schema fields must belong to the
+   * corresponding built-in pipe; unsupported request fields are rejected
+   * during route registration instead of being silently ignored.
    */
   schema?: PipeFullSchema;
 

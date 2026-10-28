@@ -242,7 +242,9 @@ class ApiController {
 
 管道负责校验和转换输入数据；每个管道的返回值会成为下一个管道的 `input`。校验基于 Fastify 的 `validatorCompiler`。
 
-未配置自定义编译器时，Fastify 使用默认的 JSON Schema 编译器；自定义编译器应在应用模块之前配置。校验错误会在守卫和拦截器执行后交给 Nestify 过滤器。内置方法级管道的自定义编译器在管道中执行，以保留转换后的值。使用 `@Opt({ attachValidation: true })` 时，处理方法可以自行读取 `request.validationError`。
+Nestify 路由的请求校验由管道执行，发生在守卫和拦截器进入阶段之后，而不是 Fastify 路由校验阶段。校验失败交给 Nestify 过滤器。内置管道优先使用路由级或应用当前的 `validatorCompiler`；两者都不可用时，使用支持 Fastify 共享 schema 的独立默认 JSON Schema 编译器。独立编译器不会继承 Fastify 的自定义 Ajv 配置；如需确保使用自定义配置，请显式设置 `validatorCompiler`。编译器和校验器按应用隔离。
+
+请求 schema 必须由对应的内置管道负责：使用 `@Body`、`@Params`、`@Query`，或在 `@UsePipes` 中使用 `PipeBody`、`PipeParams`、`PipeQuery`。`@Opt({ schema })` 中的请求 schema，以及管道 schema 中不属于该管道的请求部分（包括 headers），会在注册时明确报错，不会被静默忽略。自定义校验请自行实现管道并处理请求数据。响应 schema 仍可用于序列化。Nestify 路由忽略 `attachValidation`；普通 Fastify 路由不受影响。
 
 ```typescript
 @Pipe()
@@ -256,7 +258,7 @@ class TrimPipe extends NestifyPipe {
 @UsePipes(TrimPipe) // 不带 schema 也可以（只做转换）
 class UserController {
   @Post('/')
-  @UsePipes({ pipe: TrimPipe, schema: { body: { type: 'object', required: ['name'] } } })
+  @UsePipes(TrimPipe)
   createUser() {
     // ...
   }

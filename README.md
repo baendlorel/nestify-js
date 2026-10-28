@@ -246,7 +246,9 @@ class ApiController {
 
 Pipes validate and transform input data; each pipe's return value becomes the next pipe's `input`. Validation is based on Fastify's `validatorCompiler`.
 
-Fastify uses its default JSON Schema compiler unless a custom compiler is configured before modules are applied. Validation errors are passed to Nestify filters after guards and interceptors run. For built-in method pipes, a custom compiler runs in the pipe so transformed values are preserved. With `@Opt({ attachValidation: true })`, the handler can inspect `request.validationError` instead.
+Nestify route validation runs in pipes after guards and entering interceptors, not in Fastify's route validation phase. Invalid input is passed to Nestify filters. Built-in pipes prefer the route or application's current `validatorCompiler`; when neither is available they use an independent default JSON Schema compiler with Fastify's shared schemas. The independent compiler does not inherit custom Fastify Ajv options, so provide a `validatorCompiler` explicitly to guarantee those options. Compilers and validators are isolated per application.
+
+Request schemas must be owned by their matching built-in pipe: use `@Body`, `@Params`, `@Query`, or `@UsePipes` with `PipeBody`, `PipeParams`, or `PipeQuery`. Request schemas in `@Opt({ schema })`, or unrelated request parts (including headers) in a pipe schema, are rejected during registration instead of being silently ignored. For custom validation, implement a pipe and handle the request data explicitly. Response schemas remain available for serialization. Nestify routes ignore `attachValidation`; regular Fastify routes are unaffected.
 
 ```typescript
 @Pipe()
@@ -260,7 +262,7 @@ class TrimPipe extends NestifyPipe {
 @UsePipes(TrimPipe) // also works without a schema (transformation only)
 class UserController {
   @Post('/')
-  @UsePipes({ pipe: TrimPipe, schema: { body: { type: 'object', required: ['name'] } } })
+  @UsePipes(TrimPipe)
   createUser() {
     // ...
   }
