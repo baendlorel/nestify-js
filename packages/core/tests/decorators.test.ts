@@ -125,11 +125,11 @@ describe('Pipe decorators — metadata verification', () => {
         handler() {}
       }
       const pipes = getMethodPipes(Ctrl, 'handler');
+      // FIXED 同级装饰器改为追加合并（对齐 NestJS extendArrayMetadata），不再相互覆盖
       // Decorators apply bottom-up: @Params first, then @Body
-      // Each @UsePipes call sets (overwrites) the metadata for the method
-      // The last applied decorator (topmost = @Body) wins
-      expect(pipes).toHaveLength(1);
-      expect(pipes![0].pipe).toBe(PipeBody);
+      expect(pipes).toHaveLength(2);
+      expect(pipes![0].pipe).toBe(PipeParams);
+      expect(pipes![1].pipe).toBe(PipeBody);
     });
   });
 });

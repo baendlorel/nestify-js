@@ -20,7 +20,7 @@ import type {
 } from '@core/types/middleware.js';
 
 import { ReflectDeep } from 'reflect-deep';
-import { concatArr, sym } from '@nestify-js/shared';
+import { concatArr, sym, _isArray } from '@nestify-js/shared';
 import { splitPath, toModuleClass } from '@core/common/utils.js';
 import ph from './provider.js';
 import { NestifyInstance } from '@core/types/instance.js';
@@ -40,6 +40,17 @@ export function metaSet<T = unknown>(context: DecoratorContext, keys: SSKey[], v
  */
 export function metaGet<T = unknown>(cls: Constructor, keys: SSKey[]) {
   return ReflectDeep.get<T>(cls, [sym.metadata, sym.root, ...keys]);
+}
+
+/**
+ * Append `values` to the array metadata stored at `keys`(same as NestJS `extendArrayMetadata`)
+ * - Decorators are applied bottom-up, so the values declared closest to the handler come first
+ */
+function metaPush<T>(context: DecoratorContext, keys: SSKey[], values: T[]): boolean {
+  const existing = ReflectDeep.get<T[]>(context.metadata, [sym.root, ...keys]);
+  // FIXED 同级重复声明改为追加合并，不再用后一个装饰器覆盖前一个的元数据。
+  const merged = _isArray(existing) ? [...existing, ...values] : [...values];
+  return metaSet<T[]>(context, keys, merged);
 }
 
 export function metaSetController(context: ClassDecoratorContext, prefix?: string): boolean {
@@ -206,10 +217,10 @@ export function metaSetUseInterceptors(
   tokens: InjectToken[],
 ): boolean {
   if (context.kind === 'class') {
-    return metaSet(context, [sym.interceptor.controller], tokens);
+    return metaPush(context, [sym.interceptor.controller], tokens);
   }
 
-  return metaSet(context, [sym.interceptor.handler, context.name], tokens);
+  return metaPush(context, [sym.interceptor.handler, context.name], tokens);
 }
 
 export function metaGetUseInterceptors(app: NestifyInstance, cls: Constructor): InterceptorGetter {
@@ -225,9 +236,9 @@ export function metaSetUseGuards(
   tokens: InjectToken[],
 ): boolean {
   if (context.kind === 'class') {
-    return metaSet(context, [sym.guard.controller], tokens);
+    return metaPush(context, [sym.guard.controller], tokens);
   }
-  return metaSet(context, [sym.guard.handler, context.name], tokens);
+  return metaPush(context, [sym.guard.handler, context.name], tokens);
 }
 
 export function metaGetUseGuards(app: NestifyInstance, cls: Constructor): GuardGetter {
@@ -243,9 +254,9 @@ export function metaSetUseFilters(
   tokens: InjectToken[],
 ): boolean {
   if (context.kind === 'class') {
-    return metaSet(context, [sym.filter.controller], tokens);
+    return metaPush(context, [sym.filter.controller], tokens);
   }
-  return metaSet(context, [sym.filter.handler, context.name], tokens);
+  return metaPush(context, [sym.filter.handler, context.name], tokens);
 }
 
 export function metaGetUseFilters(app: NestifyInstance, cls: Constructor): FilterGetter {
@@ -261,9 +272,9 @@ export function metaSetUsePipes(
   pipes: PipeOptions[],
 ): boolean {
   if (context.kind === 'class') {
-    return metaSet(context, [sym.pipe.controller], pipes);
+    return metaPush(context, [sym.pipe.controller], pipes);
   }
-  return metaSet(context, [sym.pipe.handler, context.name], pipes);
+  return metaPush(context, [sym.pipe.handler, context.name], pipes);
 }
 
 export function metaGetUsePipes(app: NestifyInstance, cls: Constructor): PipeGetter {
@@ -279,6 +290,7 @@ export function metaGetUsePipes(app: NestifyInstance, cls: Constructor): PipeGet
  */
 export function metaGetFirstMethodPipe(cls: Constructor, field: SSKey): PipeOptions | undefined {
   const methodPipes = metaGet<PipeOptions[]>(cls, [sym.pipe.handler, field]);
-  return methodPipes?.[0];
+  // FIXED 合并同级 pipe 后，取第一个带 schema 的 pipe（内置 @Body/@Params/@Query 才会带），避免路由 schema 丢失。
+  return methodPipes?.find((pipe) => pipe.schema !== undefined) ?? methodPipes?.[0];
 }
 // #endregion

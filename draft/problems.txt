@@ -70,11 +70,13 @@ packages/core 问题清单
 测试：packages/core/tests/interceptor.test.ts
 语义：对齐 NestJS 的 `catchError`，内层拦截器先捕获，未恢复时向外层传递，全部未恢复才进入 filter。
 
-17. 叠加多个同级中间件装饰器会相互覆盖
-位置：packages/core/src/register/meta.ts:214、packages/core/src/register/meta.ts:278、packages/core/src/decorators/middlewares/pipe.ts:70
-复现：同一 handler 叠加两个 @UsePipes，只有最外层的 pipe 执行。其他 UseGuards/UseFilters/UseInterceptors 同样直接覆盖元数据。
-@Body、@File 等也通过 UsePipes 写入同一位置，和另一个方法级 pipe 装饰器组合时可能被覆盖。
-建议：合并同级声明并明确执行顺序；覆盖情况需有文档和测试。
+✅ 17. 叠加多个同级中间件装饰器会相互覆盖
+位置：packages/core/src/register/meta.ts:49（metaPush）、packages/core/src/register/meta.ts:215、packages/core/src/register/meta.ts:234、packages/core/src/register/meta.ts:252、packages/core/src/register/meta.ts:270、packages/core/src/register/meta.ts:291
+测试：packages/core/tests/middleware-stacking.test.ts
+执行顺序：对齐 NestJS `extendArrayMetadata`，后应用的装饰器追加到数组末尾。
+- 管道 / 守卫 / 过滤器：离 handler 最近的声明先执行（数组顺序）
+- 拦截器：`intercept` 按声明顺序调用，`map` 由内向外（离 handler 最近的是最内层，最后应用）
+- 内置 `@Body()` / `@File()` 与 `@UsePipes(...)` 可共存；路由 schema 取第一个带 schema 的 pipe
 
 18. Cron 按函数身份去重，误丢弃不同实例上的相同方法
 位置：packages/core/src/schedule/cron.ts:143、packages/core/src/schedule/cron.ts:157
@@ -112,7 +114,7 @@ packages/core 问题清单
 
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests：14 个文件、127 项通过。
+- pnpm exec vitest run packages/core/tests：15 个文件、132 项通过。
 - 临时针对性复现：21 项通过；测试文件已删除。复现测试对源码运行时缺少构建宏的 _throw 提供了本地测试替身，不代表已修复该环境问题。
 - 额外尝试包含根目录 tests 和 packages/nestify/tests 的测试：部分套件因根目录无法解析 fastify、源码运行时 _throw 未定义或旧测试引用已不存在的 injector 而失败；因此不能宣称完整集成测试通过。
 - 本清单不修改框架实现，未对所有输入组合或生产部署配置作穷举。
