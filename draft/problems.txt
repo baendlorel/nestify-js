@@ -56,18 +56,13 @@ packages/core 问题清单
 位置：packages/core/src/auth/jwt.guard.ts:49、packages/core/src/auth/jwt.guard.ts:62
 测试：packages/core/tests/jwt.test.ts
 
-14. 异步 factory 注入的是 Promise 而不是其结果
-位置：packages/core/src/register/lazy-injector.ts:107
-复现：useFactory: async () => 'ready' 后，依赖字段收到 Promise。
-类型允许 factory 返回任意值，但初始化过程不会等待它。若异步 factory 不在设计范围内，至少应明确拒绝或文档化，避免静默注入错误类型。
---帮我修复
+✅ 14. 异步 factory 注入的是 Promise 而不是其结果
+位置：packages/core/src/asserts/whether.ts:55、packages/core/src/register/lazy-injector.ts:113、packages/core/src/types/injection.ts:42
+测试：packages/core/tests/provider-values.test.ts
 
-15. useExisting 无法引用基本类型的 useValue
-位置：packages/core/src/register/lazy-injector.ts:113
-复现：{ provide: 'value', useValue: 1 } 再加 { provide: 'alias', useExisting: 'value' }，启动时报找不到 provider。
-原因：只接受对象实例，而 useValue 允许任意值；createInstance 的去重也只识别对象值。
-建议：使用 Map.has 判断是否存在，保留 false、0、字符串、null 和 undefined 等已注册值。
---用别的值感觉没啥用啊，nestjs允许吗？允许那我就允许
+✅ 15. useExisting 无法引用基本类型的 useValue
+位置：packages/core/src/register/lazy-injector.ts:95、packages/core/src/register/lazy-injector.ts:123
+测试：packages/core/tests/provider-values.test.ts
 
 16. 拦截器 catch 无法捕获控制器或 pipe 抛出的异常
 位置：packages/core/src/register/route/handler.ts:30、packages/core/src/decorators/middlewares/interceptor.ts:26
@@ -117,7 +112,7 @@ packages/core 问题清单
 
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests：13 个文件、117 项通过。
+- pnpm exec vitest run packages/core/tests：14 个文件、120 项通过。
 - 临时针对性复现：21 项通过；测试文件已删除。复现测试对源码运行时缺少构建宏的 _throw 提供了本地测试替身，不代表已修复该环境问题。
 - 额外尝试包含根目录 tests 和 packages/nestify/tests 的测试：部分套件因根目录无法解析 fastify、源码运行时 _throw 未定义或旧测试引用已不存在的 injector 而失败；因此不能宣称完整集成测试通过。
 - 本清单不修改框架实现，未对所有输入组合或生产部署配置作穷举。

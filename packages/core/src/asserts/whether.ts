@@ -49,6 +49,13 @@ export function likeModule(target: unknown): target is Constructor {
   return true;
 }
 
+/**
+ * Check whether the target is a promise like(thenable) value
+ */
+export function isThenable(target: unknown): target is PromiseLike<unknown> {
+  return typeof (target as { then?: unknown } | null | undefined)?.then === 'function';
+}
+
 export function isInjectToken(target: any): target is InjectToken {
   if (_isKey(target)) {
     return true;

@@ -39,6 +39,7 @@ export interface ProviderUseFactory {
    * Provide via factory function.
    * - If `inject` is provided, it will be injected into the factory function.
    *   - When `inject` = `[MyClass1, 'token1']`, the factory will be called as `useFactory(myClass1, instanceOfToken1)`.
+   * - **Must be synchronous**: providers are created during bootstrap, so a returned promise is rejected.
    */
   useFactory: (...instances: any[]) => any;
 

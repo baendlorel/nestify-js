@@ -6,7 +6,7 @@ import type { NestifyInstance } from '@core/types/instance.js';
 import { _construct, _getPrototypeOf, _isObject, _ownKeys, APP_LOGGER } from '@nestify-js/shared';
 
 import { toModuleClass } from '@core/common/index.js';
-import { expectFunction, expectObject, expect } from '@core/asserts/index.js';
+import { expectFunction, expectObject, expect, isThenable } from '@core/asserts/index.js';
 import { bindCronJob } from '@core/schedule/cron.js';
 
 import { metaGetInject, metaGetModule, metaGetProvider } from './meta.js';
@@ -92,9 +92,9 @@ export class Injector {
 
   createInstance(opts: ProviderOptions): InstanceType<Constructor> {
     const token = this.getProvide(opts);
-    const exist = this.instanceMap.get(token);
-    if (_isObject<InstanceType<Constructor>>(exist)) {
-      return exist;
+    // FIXED 改用 `Map.has` 判断是否已注册，`useValue` 为 false / 0 / '' / null / undefined 时不会被重复创建。
+    if (this.instanceMap.has(token)) {
+      return this.instanceMap.get(token);
     }
     return ph.match(opts, {
       useClass: (token, cls) => {
@@ -109,15 +109,21 @@ export class Injector {
         // FIXED 依赖 token 统一归一化：类依赖以构造函数身份查找，不再按类名字符串查找。
         const instances = inject.map((arg) => this.instanceMap.get(ph.getInjectToken(arg)));
         const instance = factory(...instances);
+        // FIXED 初始化流程是同步的，异步 factory 会让依赖方拿到 Promise；现在显式报错，不再静默注入错误类型。
+        if (isThenable(instance)) {
+          _throw(`Async factory for '${ph.getName(token)}' is not supported, providers must be created synchronously`);
+        }
         this.instanceMap.set(token, instance);
         return instance;
       },
       useExisting: (token, existingToken) => {
         // FIXED 别名目标同样按 token 身份解析，避免 `useExisting` 退化成按类名匹配。
-        const instance = this.instanceMap.get(ph.getInjectToken(existingToken));
-        if (!_isObject(instance)) {
+        const dependencyToken = ph.getInjectToken(existingToken);
+        // FIXED 用 `Map.has` 判断目标是否存在，因此 useValue 的基本类型值也可以被别名引用。
+        if (!this.instanceMap.has(dependencyToken)) {
           _throw(`Cannot find existing provider: ${ph.getName(existingToken)}`);
         }
+        const instance = this.instanceMap.get(dependencyToken);
         this.instanceMap.set(token, instance);
         return instance;
       },
