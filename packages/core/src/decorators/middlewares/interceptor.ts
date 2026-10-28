@@ -2,12 +2,19 @@ import type { AnyFunction, Constructor, OrPromise } from '@core/types/primitives
 import type { ExecutionContext } from '@core/common/execution-context.js';
 import type { InjectToken } from '@core/types/injection.js';
 import type { NestifyInterceptorLike, InterceptorNextHandlerLike } from '@core/types/middleware.js';
-import { promiseTry, subclassOf, sym } from '@nestify-js/shared';
+import { promiseTry, subclassOf } from '@nestify-js/shared';
 
 import { expect } from '@core/asserts/index.js';
 import { metaSetInterceptor, metaSetUseInterceptors } from '@core/register/meta.js';
 import { _Injectable } from '../injectable.js';
 import { expectMiddleware } from './expect-middleware.js';
+
+/**
+ * Outcome of one interceptor step
+ * - `ok: true` carries the value that keeps flowing outward
+ * - `ok: false` carries the error that must be handed to the next(outer) interceptor
+ */
+export type InterceptorOutcome = { ok: true; value: any } | { ok: false; error: unknown };
 
 export class NestifyInterceptorNextHandler implements InterceptorNextHandlerLike {
   /**
@@ -22,37 +29,60 @@ export class NestifyInterceptorNextHandler implements InterceptorNextHandlerLike
 
   /**
    * @internal
+   * Run this interceptor over the outcome of the downstream chain
+   * - Value: apply `map` / `tap`, a failure there is handled by its own `catch`
+   * - Error: skip `map` / `tap` and give `catch` a chance to recover(like NestJS `catchError`)
    */
-  async run(controllerResult: any) {
-    let current = controllerResult;
-    let currentError: any = sym.none;
+  async runOutcome(outcome: InterceptorOutcome): Promise<InterceptorOutcome> {
+    if (!outcome.ok) {
+      // FIXED 下游(控制器 / pipe / 内层拦截器)抛出的异常先交给本拦截器的 `catch`，与 NestJS 的 catchError 语义一致。
+      return this.applyCatchers(outcome.error);
+    }
 
     try {
-      for (let i = 0; i < this.queue.length; i++) {
-        const v = this.queue[i];
-        if (v.type === 'map') {
-          current = await promiseTry(v.fn, null, current);
-        } else if (v.type === 'tap') {
-          await promiseTry(v.fn, null, current);
-        }
-      }
+      return { ok: true, value: await this.applyQueue(outcome.value) };
     } catch (e) {
-      currentError = e;
-      for (let i = 0; i < this.catchers.length; i++) {
-        try {
-          current = await promiseTry(this.catchers[i], null, currentError);
-          currentError = sym.none;
-          break;
-        } catch (nextError) {
-          currentError = nextError;
-        }
-      }
+      return this.applyCatchers(e);
     }
+  }
 
-    if (currentError !== sym.none) {
-      throw currentError;
+  /**
+   * @internal
+   */
+  async run(controllerResult: any) {
+    const outcome = await this.runOutcome({ ok: true, value: controllerResult });
+    if (!outcome.ok) {
+      throw outcome.error;
+    }
+    return outcome.value;
+  }
+
+  private async applyQueue(value: any) {
+    let current = value;
+    for (let i = 0; i < this.queue.length; i++) {
+      const v = this.queue[i];
+      if (v.type === 'map') {
+        current = await promiseTry(v.fn, null, current);
+      } else if (v.type === 'tap') {
+        await promiseTry(v.fn, null, current);
+      }
     }
     return current;
+  }
+
+  /**
+   * Try catchers in registration order, the first one that does not throw recovers the flow.
+   */
+  private async applyCatchers(error: unknown): Promise<InterceptorOutcome> {
+    let currentError = error;
+    for (let i = 0; i < this.catchers.length; i++) {
+      try {
+        return { ok: true, value: await promiseTry(this.catchers[i], null, currentError) };
+      } catch (nextError) {
+        currentError = nextError;
+      }
+    }
+    return { ok: false, error: currentError };
   }
 
   /**

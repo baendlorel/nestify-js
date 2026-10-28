@@ -65,11 +65,10 @@ packages/core 问题清单
 位置：packages/core/src/register/lazy-injector.ts:95、packages/core/src/register/lazy-injector.ts:123
 测试：packages/core/tests/provider-values.test.ts
 
-16. 拦截器 catch 无法捕获控制器或 pipe 抛出的异常
-位置：packages/core/src/register/route/handler.ts:30、packages/core/src/decorators/middlewares/interceptor.ts:26
-复现：拦截器注册 next.catch 后，控制器抛错，catch 回调没有执行，直接进入 filter。
-当前 catch 仅覆盖该拦截器自身 map/tap 回调中的异常，不能覆盖其包装的下游处理流程。
-建议：明确并实现拦截器对下游错误的传播和恢复语义。
+✅ 16. 拦截器 catch 无法捕获控制器或 pipe 抛出的异常
+位置：packages/core/src/decorators/middlewares/interceptor.ts:36、packages/core/src/register/route/middlewares/interceptor.ts:29、packages/core/src/register/route/handler.ts:55
+测试：packages/core/tests/interceptor.test.ts
+语义：对齐 NestJS 的 `catchError`，内层拦截器先捕获，未恢复时向外层传递，全部未恢复才进入 filter。
 
 17. 叠加多个同级中间件装饰器会相互覆盖
 位置：packages/core/src/register/meta.ts:214、packages/core/src/register/meta.ts:278、packages/core/src/decorators/middlewares/pipe.ts:70
@@ -113,7 +112,7 @@ packages/core 问题清单
 
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests：14 个文件、121 项通过。
+- pnpm exec vitest run packages/core/tests：14 个文件、127 项通过。
 - 临时针对性复现：21 项通过；测试文件已删除。复现测试对源码运行时缺少构建宏的 _throw 提供了本地测试替身，不代表已修复该环境问题。
 - 额外尝试包含根目录 tests 和 packages/nestify/tests 的测试：部分套件因根目录无法解析 fastify、源码运行时 _throw 未定义或旧测试引用已不存在的 injector 而失败；因此不能宣称完整集成测试通过。
 - 本清单不修改框架实现，未对所有输入组合或生产部署配置作穷举。

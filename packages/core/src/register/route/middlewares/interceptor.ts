@@ -3,7 +3,7 @@ import type { InterceptorTask, NestifyInterceptorLike } from '@core/types/middle
 import type { NestifyInstance } from '@core/types/instance.js';
 
 import { createSerialTaskAsync, TaskifyAsync } from 'serial-task';
-import { NestifyInterceptorNextHandler } from '@core/decorators/middlewares/interceptor.js';
+import { NestifyInterceptorNextHandler, type InterceptorOutcome } from '@core/decorators/middlewares/interceptor.js';
 
 /**
  * Create a preValidation hook for the route
@@ -20,13 +20,18 @@ export function createInterceptor(app: NestifyInstance, tokens: InjectToken[]): 
 /**
  * Use to run interceptors.
  * - Not using serial task because we need to be easier.
+ * - Runs from the innermost interceptor to the outermost one, carrying either the
+ *   controller result or the downstream error, so `catch` sees errors of the whole chain.
  */
-export async function runReverseInterceptors(inh: NestifyInterceptorNextHandler[], controllerReturn: any) {
-  let result = controllerReturn;
+export async function runReverseInterceptors(
+  inh: NestifyInterceptorNextHandler[],
+  initial: InterceptorOutcome,
+): Promise<InterceptorOutcome> {
+  let outcome = initial;
 
   for (let i = inh.length - 1; i >= 0; i--) {
-    result = await inh[i].run(result);
+    outcome = await inh[i].runOutcome(outcome);
   }
 
-  return result;
+  return outcome;
 }

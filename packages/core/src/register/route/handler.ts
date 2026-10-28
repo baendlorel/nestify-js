@@ -24,6 +24,7 @@ export function createHandler(
   const { guard, interceptor, pipe, filter } = middlewares;
   return async function (request: FastifyRequest, reply: FastifyReply) {
     const context = new ExecutionContext([request, reply], 'http', controller, method, validatorCompiler);
+    let interceptorHandlers: NestifyInterceptorNextHandler[] = [];
 
     try {
       // Guards
@@ -31,6 +32,7 @@ export function createHandler(
 
       // Interceptors
       const interceptResult = await interceptor(context, new NestifyInterceptorNextHandler());
+      interceptorHandlers = (interceptResult.results as NestifyInterceptorNextHandler[]) ?? [];
 
       // Pipes
       const piped = await pipe(context, [], {});
@@ -40,17 +42,22 @@ export function createHandler(
         expectArray(piped.value, `Pipe must return an array, but got: ${String(piped)}`);
       }
 
-      // Controller method
-      let result = await method(...piped.value);
+      // Controller method + interceptor leave
+      const result = await method(...piped.value);
+      const outcome = await runReverseInterceptors(interceptorHandlers, { ok: true, value: result });
+      if (outcome.ok) {
+        return outcome.value;
+      }
 
-      // Interceptor leave
-      const interceptorNextHandlers = interceptResult.results as NestifyInterceptorNextHandler[];
-      result = await runReverseInterceptors(interceptorNextHandlers, result);
-
-      return result;
+      await filter(context, outcome.error);
     } catch (e) {
-      // Filter
-      await filter(context, e);
+      // FIXED 控制器 / pipe / guard 抛出的异常也会依次交给各拦截器的 `catch` 处理（对齐 NestJS 的 catchError），未被恢复时再进入 filter。
+      const outcome = await runReverseInterceptors(interceptorHandlers, { ok: false, error: e });
+      if (outcome.ok) {
+        return outcome.value;
+      }
+
+      await filter(context, outcome.error);
     }
   };
 }
