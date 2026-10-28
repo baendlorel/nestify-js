@@ -23,6 +23,7 @@ import { PipeParams } from '@core/pipes/params.pipe.js';
 import { PipeQuery } from '@core/pipes/query.pipe.js';
 import { NestifyError } from '@core/asserts/error.js';
 import type { PipeFullSchema, PipeOptions } from '@core/types/middleware.js';
+import ph from '@core/register/provider.js';
 
 function concatRoute(...routes: string[][]): string {
   const flatRoutes = routes
@@ -61,7 +62,7 @@ function assertPipeSchemas(app: NestifyInstance, pipes: PipeOptions[], route: st
     for (const key of requestParts) {
       if (schema[key] !== undefined && key !== part) {
         throw new NestifyError(
-          `Route ${route}: schema.${key} is not validated by ${String(pipe)}; use the corresponding built-in pipe`,
+          `Route ${route}: schema.${key} is not validated by ${ph.getName(pipe)}; use the corresponding built-in pipe`,
         );
       }
     }

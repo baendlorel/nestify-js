@@ -9,24 +9,25 @@ import type {
 } from '@core/types/injection.js';
 
 import { inspect } from 'node:util';
-import { _isConstructable, _isFunction, type Constructor, type SSKey } from '@nestify-js/shared';
+import { _isConstructable, _isFunction, _isKey, type Constructor } from '@nestify-js/shared';
 import { expectClass, expectFunction, expectKey } from '@core/asserts/index.js';
 
 namespace ph {
   export function match(
     opts: ProviderOptions,
     callbacks: {
-      useClass?: (token: SSKey, cls: Constructor) => unknown;
-      useValue?: (token: SSKey, value: InstanceType<Constructor>) => unknown;
-      useFactory?: (token: SSKey, factory: (...instances: any[]) => any, inject: InjectToken[]) => unknown;
-      useExisting?: (token: SSKey, existingToken: SSKey) => unknown;
+      useClass?: (token: InjectToken, cls: Constructor) => unknown;
+      useValue?: (token: InjectToken, value: InstanceType<Constructor>) => unknown;
+      useFactory?: (token: InjectToken, factory: (...instances: any[]) => any, inject: InjectToken[]) => unknown;
+      useExisting?: (token: InjectToken, existingToken: InjectToken) => unknown;
     },
   ) {
     const { useClass, useExisting, useFactory, useValue } = callbacks;
 
     // Handle direct class provider
     if (_isConstructable(opts) && useClass) {
-      return useClass(opts.name, opts);
+      // FIXED 类 provider 的 token 就是构造函数本身，不再退化成类名字符串，避免同名类互相覆盖。
+      return useClass(opts, opts);
     }
 
     const optsStr = inspect(opts);
@@ -58,51 +59,52 @@ namespace ph {
     _throw(`ProviderOptions must have one of useClass/useValue/useFactory/useExisting, got: ${optsStr}`);
   }
 
-  export function getToken(providerOptions: ProviderOptions) {
-    const token = 'provide' in providerOptions ? providerOptions.provide : providerOptions.name;
-    expectKey(token, `ProviderOptions must have a valid token, got '${providerOptions}'`);
+  export function getToken(providerOptions: ProviderOptions): InjectToken {
+    // FIXED 对齐 NestJS：类 provider 直接以构造函数作为 token；字符串 / symbol token 保持独立。
+    const token = _isConstructable(providerOptions) ? providerOptions : providerOptions.provide;
+    expectKey(token, `ProviderOptions must have a valid token, got '${String(token)}'`);
     return token;
   }
 
   /**
-   * Normalize the inject argument to a string/symbol/class name.
-   * @param arg InjectArg
-   * @returns  a token used by `lazyInjector.instanceMap`
+   * Human readable name of a token, only for error messages.
+   * - Never use it as a lookup key, the token identity itself must be used.
    */
-  export function getInjectToken(arg: InjectArg) {
-    if (typeof arg === 'string') {
-      return arg;
+  export function getName(token: InjectToken): string {
+    if (typeof token === 'string') {
+      return token;
     }
-    if (typeof arg === 'symbol') {
+    if (typeof token === 'symbol') {
+      return token.description ?? String(token);
+    }
+    return token.name || 'anonymous class';
+  }
+
+  /**
+   * Normalize the inject argument to a token.
+   * @param arg InjectArg
+   * @returns the token used by `lazyInjector.instanceMap`
+   */
+  export function getInjectToken(arg: InjectArg): InjectToken {
+    if (_isKey(arg)) {
       return arg;
     }
 
     if (_isConstructable(arg)) {
-      return arg.name;
+      // FIXED 类依赖以构造函数身份作为 token，不再按类名查找。
+      return arg;
     }
 
     if (_isFunction(arg)) {
-      return arg().name;
+      // FIXED 惰性引用(`() => Class`)同样解析为构造函数本身，保持与直接引用一致的身份。
+      return arg();
     }
 
     _throw('Cannot get inject token from argument: ' + String(arg));
   }
 
-  export function getInjectTokenName(arg: InjectArg) {
-    if (typeof arg === 'string') {
-      return arg;
-    }
-    if (typeof arg === 'symbol') {
-      return String(arg);
-    }
-
-    if (_isConstructable(arg)) {
-      return arg.name;
-    }
-
-    if (_isFunction(arg)) {
-      return arg().name;
-    }
+  export function getInjectTokenName(arg: InjectArg): string {
+    return getName(getInjectToken(arg));
   }
 }
 

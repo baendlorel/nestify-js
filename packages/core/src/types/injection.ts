@@ -31,8 +31,9 @@ export type InjectArg = InjectToken | (() => Constructor);
 export interface ProviderUseFactory {
   /**
    * The unique token used to identify and inject this provider.
+   * - Use the class itself to align with `@Injectable` classes
    */
-  provide: SSKey;
+  provide: InjectToken;
 
   /**
    * Provide via factory function.
@@ -48,7 +49,7 @@ export interface ProviderUseValue {
   /**
    * The unique token used to identify and inject this provider.
    */
-  provide: SSKey;
+  provide: InjectToken;
 
   /**
    * Directly provide a value. No dependency injection is performed.
@@ -61,7 +62,7 @@ export interface ProviderUseClass {
   /**
    * The unique token used to identify and inject this provider.
    */
-  provide: SSKey;
+  provide: InjectToken;
 
   /**
    * Provide via class. Managed by Nestify, dependencies are automatically injected.
@@ -73,12 +74,12 @@ export interface ProviderUseExisting {
   /**
    * The unique token used to identify and inject this provider.
    */
-  provide: SSKey;
+  provide: InjectToken;
 
   /**
    * Provide by referencing an existing provider. No chain lookup; only the referenced provider is used.
    */
-  useExisting: SSKey;
+  useExisting: InjectToken;
 }
 
 export type ProviderStandardOptions = ProviderUseFactory | ProviderUseValue | ProviderUseClass | ProviderUseExisting;
@@ -155,7 +156,7 @@ export interface NestifyOptions {
 }
 
 export interface LazyInjectEntry {
-  provide: SSKey;
+  provide: InjectToken;
   propertyKey: SSKey;
   dependency: InjectArg;
 }
@@ -219,7 +220,7 @@ export interface ModuleMeta {
   /**
    * `app` is used to append global providers to the accessible provider tokens list.
    */
-  getAccessibleProviderTokens(app: NestifyInstance): SSKey[];
+  getAccessibleProviderTokens(app: NestifyInstance): InjectToken[];
 }
 
 export interface InheritedModuleMeta {

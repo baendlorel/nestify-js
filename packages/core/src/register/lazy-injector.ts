@@ -3,15 +3,7 @@ import type { NestifyMiddleware } from '@core/types/middleware.js';
 import type { AnyFunction, Constructor, SSKey } from '@core/types/primitives.js';
 import type { NestifyInstance } from '@core/types/instance.js';
 
-import {
-  _construct,
-  _getPrototypeOf,
-  _isConstructable,
-  _isKey,
-  _isObject,
-  _ownKeys,
-  APP_LOGGER,
-} from '@nestify-js/shared';
+import { _construct, _getPrototypeOf, _isObject, _ownKeys, APP_LOGGER } from '@nestify-js/shared';
 
 import { toModuleClass } from '@core/common/index.js';
 import { expectFunction, expectObject, expect } from '@core/asserts/index.js';
@@ -28,15 +20,24 @@ export class Injector {
 
   /**
    * A map from token to the instance of Class
+   * - Class providers are keyed by the constructor identity(like NestJS), not by class name
    */
-  readonly instanceMap = new Map<SSKey, any>();
+  readonly instanceMap = new Map<InjectToken, any>();
 
   getProvide(opts: ProviderOptions) {
-    return _isConstructable(opts) ? opts.name : opts.provide;
+    // FIXED 统一走 `ph.getToken`：类 provider 使用构造函数身份作为 token。
+    return ph.getToken(opts);
   }
 
-  get<T extends object>(token: InjectToken) {
-    return this.instanceMap.get(_isKey(token) ? token : token.name) as T | undefined;
+  /**
+   * Get the instance registered under `token`.
+   * - Passing a class infers the instance type from the constructor itself
+   */
+  // FIXED 查找统一按 token 身份（类 → 构造函数），并从构造函数推断返回类型。
+  get<T extends object>(token: Constructor<T>): T | undefined;
+  get<T extends object = object>(token: InjectToken): T | undefined;
+  get(token: InjectToken): object | undefined {
+    return this.instanceMap.get(ph.getInjectToken(token));
   }
 
   /**
@@ -46,16 +47,16 @@ export class Injector {
    */
   getMiddlewareHooks<T extends NestifyMiddleware>(tokens: InjectToken[], handlerName: SSKey): AnyFunction[] {
     return tokens.map((token) => {
-      const instance = this.get(_isKey(token) ? token : token.name);
-      expectObject<T>(instance, `Cannot find class for token: ${String(token)}`);
+      const instance = this.get(token);
+      expectObject<T>(instance, `Cannot find class for token: ${ph.getName(token)}`);
       const handler = (instance as unknown as Record<SSKey, AnyFunction>)[handlerName];
-      expectFunction(handler, `Handler '${String(handlerName)}' not found in ${String(token)}`);
+      expectFunction(handler, `Handler '${String(handlerName)}' not found in ${ph.getName(token)}`);
       return (...args) => handler.apply(instance, args);
     });
   }
 
   getDetail<T extends object>(token: InjectToken): { instance: T; cls: Constructor | null } {
-    const instance = this.instanceMap.get(_isKey(token) ? token : token.name) as T;
+    const instance = this.instanceMap.get(ph.getInjectToken(token)) as T;
     const cls = (_getPrototypeOf(instance)?.constructor ?? null) as Constructor | null;
     return { instance, cls };
   }
@@ -66,7 +67,7 @@ export class Injector {
    * - Record the token, injected field name and `injectArg` into a list
    *   - This list will be used by `apply` after all instances are created
    */
-  createInstanceByClass(token: SSKey, cls: Constructor) {
+  createInstanceByClass(token: InjectToken, cls: Constructor) {
     const { args } = metaGetProvider(cls);
     const instance = _construct(cls, args);
     this.instanceMap.set(token, instance);
@@ -105,15 +106,17 @@ export class Injector {
       },
       // ! This means the injections must be created after instanceMap being filled up
       useFactory: (token, factory, inject) => {
-        const instances = inject.map((arg) => this.instanceMap.get(_isKey(arg) ? arg : arg.name));
+        // FIXED 依赖 token 统一归一化：类依赖以构造函数身份查找，不再按类名字符串查找。
+        const instances = inject.map((arg) => this.instanceMap.get(ph.getInjectToken(arg)));
         const instance = factory(...instances);
         this.instanceMap.set(token, instance);
         return instance;
       },
       useExisting: (token, existingToken) => {
-        const instance = this.instanceMap.get(existingToken);
+        // FIXED 别名目标同样按 token 身份解析，避免 `useExisting` 退化成按类名匹配。
+        const instance = this.instanceMap.get(ph.getInjectToken(existingToken));
         if (!_isObject(instance)) {
-          _throw(`Cannot find existing provider: ${String(existingToken)}`);
+          _throw(`Cannot find existing provider: ${ph.getName(existingToken)}`);
         }
         this.instanceMap.set(token, instance);
         return instance;
@@ -139,10 +142,10 @@ export class Injector {
       const { provide, propertyKey, dependency } = this.injectList[i];
       const tokenOfDependency = ph.getInjectToken(dependency);
 
-      expect(map.has(provide), `Provider '${String(provide)}' not found`);
+      expect(map.has(provide), `Provider '${ph.getName(provide)}' not found`);
       expect(
         map.has(tokenOfDependency),
-        `Dependency '${String(tokenOfDependency)}' of a provider '${String(provide)}' not found. Maybe '${String(tokenOfDependency)}' is not decorated by @Injectable or something`,
+        `Dependency '${ph.getName(tokenOfDependency)}' of a provider '${ph.getName(provide)}' not found. Maybe '${ph.getName(tokenOfDependency)}' is not decorated by @Injectable or something`,
       );
 
       const instance = map.get(provide);
@@ -166,7 +169,10 @@ export class Injector {
       const { provide, propertyKey, dependency } = this.injectList[i];
       const instance = this.instanceMap.get(provide);
       const name = ph.getInjectTokenName(dependency);
-      expect(propertyKey in instance, `${String(provide)}[${String(propertyKey)}] depends on '${name}' but not given`);
+      expect(
+        propertyKey in instance,
+        `${ph.getName(provide)}[${String(propertyKey)}] depends on '${name}' but not given`,
+      );
     }
   }
 

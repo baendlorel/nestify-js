@@ -6,6 +6,7 @@ import { createSerialTaskAsync, TaskifyAsync } from 'serial-task';
 import { expectArray, expectClass } from '@core/asserts/index.js';
 import { metaGetFilters } from '@core/register/meta.js';
 import { HttpException } from '@core/exceptions/index.js';
+import ph from '@core/register/provider.js';
 
 const defaultFilter: TaskifyAsync<FilterTask> = async (context, exception) => {
   const http = context.switchToHttp();
@@ -34,7 +35,7 @@ const defaultFilter: TaskifyAsync<FilterTask> = async (context, exception) => {
 export function createFilter(app: NestifyInstance, tokens: InjectToken[]): TaskifyAsync<FilterTask> {
   const catches = tokens.map((token) => {
     const { cls } = app.injector.getDetail<NestifyFilterLike>(token);
-    expectClass(cls, `Filter token '${String(token)}' must refer to a class, but got ${String(cls)}`);
+    expectClass(cls, `Filter token '${ph.getName(token)}' must refer to a class, but got ${String(cls)}`);
 
     const exceptionClasses = metaGetFilters(cls) ?? [];
     expectArray(exceptionClasses, 'exceptions classes must be an array', (c) =>

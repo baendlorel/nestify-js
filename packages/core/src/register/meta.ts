@@ -142,13 +142,14 @@ export function metaSetModule(context: ClassDecoratorContext, options: Partial<M
     imports: [...new Set(imports)],
     exports: [...new Set(exports)],
     getAccessibleProviderTokens(app: NestifyInstance) {
-      const imported: SSKey[] = imports
+      const imported: InjectToken[] = imports
         .map((m: Constructor | DynamicModule) => {
           const moduleClass = toModuleClass(m);
-          return metaGetModule(moduleClass).exports.map((e) => e.name);
+          // FIXED 导出项按 token 归一化（类 → 构造函数身份），不再转成类名字符串。
+          return metaGetModule(moduleClass).exports.map((e) => ph.getToken(e));
         })
         .flat();
-      const providerTokens: SSKey[] = providers.map((p: ProviderOptions) => ph.getToken(p));
+      const providerTokens: InjectToken[] = providers.map((p: ProviderOptions) => ph.getToken(p));
       return [...providerTokens, ...imported, ...app.collection.globalProviders];
     },
     outer,

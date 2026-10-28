@@ -32,13 +32,9 @@ packages/core 问题清单
 位置：packages/core/src/auth/jwt.ts:166、packages/core/src/auth/jwt.ts:182、packages/core/src/auth/jwt.ts:250
 测试：packages/core/tests/jwt.test.ts
 
-9. DI 以类名代替类身份，导致不同类发生 token 冲突
-位置：packages/core/src/register/lazy-injector.ts:34、packages/core/src/register/provider.ts:30、packages/core/src/register/provider.ts:76
-复现：两个不同的 class Service 同时注册时，第二个类的查找返回第一个类的实例。
-影响：跨模块、第三方库或构建压缩产生同名类时，注入错误实例，甚至引发错误的权限或业务行为。
-建议：类 token 使用构造函数身份；字符串和 symbol token 保持独立。
--- 已核对 NestJS：`InjectionToken = string | symbol | Type`，类 provider 直接以构造函数作为 Map key，`name` 仅用于日志/报错
--- 待确认方案：A 对齐 NestJS（构造函数即 token）；B 仅注册时检测同名冲突；C A + 类名字符串兜底
+✅ 9. DI 以类名代替类身份，导致不同类发生 token 冲突
+位置：packages/core/src/register/provider.ts:62、packages/core/src/register/provider.ts:88、packages/core/src/register/lazy-injector.ts:31
+测试：packages/core/tests/di-token-identity.test.ts
 
 
 10. 模块隔离可以被 Symbol 字段和 useExisting 绕过
@@ -126,7 +122,7 @@ packages/core 问题清单
 
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests --exclude packages/core/tests/review-probe.test.ts：现有 core 测试 7 个文件、43 项通过。
+- pnpm exec vitest run packages/core/tests：12 个文件、111 项通过。
 - 临时针对性复现：21 项通过；测试文件已删除。复现测试对源码运行时缺少构建宏的 _throw 提供了本地测试替身，不代表已修复该环境问题。
 - 额外尝试包含根目录 tests 和 packages/nestify/tests 的测试：部分套件因根目录无法解析 fastify、源码运行时 _throw 未定义或旧测试引用已不存在的 injector 而失败；因此不能宣称完整集成测试通过。
 - 本清单不修改框架实现，未对所有输入组合或生产部署配置作穷举。

@@ -1,17 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { InjectMetadata, ProviderOptions } from '@core/types/injection.js';
+import type { InjectMetadata, InjectToken, ProviderOptions } from '@core/types/injection.js';
 import { inspect } from 'node:util';
-import {
-  sym,
-  _values,
-  _isArray,
-  _isConstructable,
-  _isKey,
-  _isObject,
-  _isPathNode,
-  type Constructor,
-  type SSKey,
-} from '@nestify-js/shared';
+import { sym, _values, _isArray, _isConstructable, _isObject, _isPathNode, type Constructor } from '@nestify-js/shared';
 
 import { RouteConfig } from '@core/types/index.js';
 import { toModuleClass } from '@core/common/utils.js';
@@ -177,7 +167,7 @@ export function expectModule(target: unknown): asserts target is Constructor {
  * @param opts Will only check when it is a class
  * @param apTokens accessible provider tokens
  */
-export function expectAccessible(opts: ProviderOptions, apTokens: SSKey[]) {
+export function expectAccessible(opts: ProviderOptions, apTokens: InjectToken[]) {
   const tks = getDependencyTokens(opts);
   if (!tks) {
     return;
@@ -185,7 +175,10 @@ export function expectAccessible(opts: ProviderOptions, apTokens: SSKey[]) {
 
   for (let i = 0; i < tks.length; i++) {
     const includes = apTokens.includes(tks[i]);
-    expect(includes, `${String(tks[i])}(to ${String(ph.getToken(opts))}) is not from current/imported/global module`);
+    expect(
+      includes,
+      `${ph.getName(tks[i])}(to ${ph.getName(ph.getToken(opts))}) is not from current/imported/global module`,
+    );
   }
 }
 
@@ -195,7 +188,7 @@ export function clearExpectCache() {
   injectableCache.clear();
 }
 
-function getDependencyTokens(options: ProviderOptions): SSKey[] | null {
+function getDependencyTokens(options: ProviderOptions): InjectToken[] | null {
   if (_isConstructable(options)) {
     const injections = metaGetInject(options);
     if (!_isObject(injections)) {
@@ -214,7 +207,8 @@ function getDependencyTokens(options: ProviderOptions): SSKey[] | null {
 
   if ('inject' in options) {
     if (_isArray(options.inject)) {
-      return options.inject.map((arg) => (_isKey(arg) ? arg : arg.name));
+      // FIXED factory 的依赖 token 同样按身份归一化（类 → 构造函数），与 provider token 保持一致。
+      return options.inject.map((arg) => ph.getInjectToken(arg));
     } else {
       return null;
     }

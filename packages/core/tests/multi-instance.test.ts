@@ -52,7 +52,8 @@ describe('multiple Nestify instances', () => {
       expect(first.injector).not.toBe(second.injector);
       expect(first.collection).not.toBe(second.collection);
       expect(first.injector.get(CounterService)).not.toBe(second.injector.get(CounterService));
-      expect(first.collection.globalGuards).toEqual(['FirstAppGuard']);
+      // FIXED 类 token 使用构造函数身份，不再是类名字符串。
+      expect(first.collection.globalGuards).toEqual([FirstAppGuard]);
       expect(second.collection.globalGuards).toEqual([]);
 
       expect(JSON.parse((await first.inject({ method: 'GET', url: '/counter/' })).body)).toEqual({ value: 1 });

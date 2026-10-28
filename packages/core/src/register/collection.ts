@@ -1,18 +1,19 @@
-import { type Constructor, type SSKey } from '@nestify-js/shared';
-import type { ModuleMeta } from '@core/types/injection.js';
+import { type Constructor } from '@nestify-js/shared';
+import type { InjectToken, ModuleMeta } from '@core/types/injection.js';
 import type { PipeOptions } from '@core/types/middleware.js';
 
 import { ReflectDeep } from 'reflect-deep';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE, APP_LOGGER, sym } from '@nestify-js/shared';
 
 import { expect } from '@core/asserts/index.js';
+import ph from './provider.js';
 
 export class Collection {
   readonly globalModules = new Set<Constructor>();
-  readonly globalProviders = new Set<SSKey>();
-  readonly globalInterceptors: SSKey[] = [];
-  readonly globalGuards: SSKey[] = [];
-  readonly globalFilters: SSKey[] = [];
+  readonly globalProviders = new Set<InjectToken>();
+  readonly globalInterceptors: InjectToken[] = [];
+  readonly globalGuards: InjectToken[] = [];
+  readonly globalFilters: InjectToken[] = [];
   readonly globalPipes: PipeOptions[] = [];
 
   /**
@@ -21,8 +22,8 @@ export class Collection {
    * @param middleware tokens like `APP_FILTER`...
    * @returns
    */
-  addGlobalMiddleware(middleware: SSKey) {
-    const name = typeof middleware === 'symbol' ? middleware.description : middleware;
+  addGlobalMiddleware(middleware: InjectToken) {
+    const name = ph.getName(middleware);
     switch (middleware) {
       case APP_FILTER:
         expect(this.globalFilters.length === 0, `${name} can only be registered once`);
@@ -58,7 +59,8 @@ export class Collection {
   assembleGlobalProviders() {
     this.globalModules.forEach((m) => {
       const moduleMetadata = ReflectDeep.get(m, [sym.metadata, sym.root, sym.module]) as ModuleMeta;
-      moduleMetadata.exports.forEach((exported) => this.globalProviders.add(exported.name));
+      // FIXED 导出的 provider 统一归一化为 token（类 → 构造函数身份），与内部 token 使用同一身份。
+      moduleMetadata.exports.forEach((exported) => this.globalProviders.add(ph.getToken(exported)));
     });
     [...this.globalFilters, ...this.globalGuards, ...this.globalInterceptors].forEach((token) =>
       this.globalProviders.add(token),

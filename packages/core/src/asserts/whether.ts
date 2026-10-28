@@ -86,7 +86,8 @@ export function isProviderOptions(target: unknown): target is ProviderOptions {
   if (!_isObject<ProviderStandardOptions>(target)) {
     return false;
   }
-  if (!_isKey(target.provide)) {
+  // FIXED 允许类作为 `provide`，与 token 身份化保持一致（类不再被转成类名字符串）。
+  if (!isInjectToken(target.provide)) {
     return false;
   }
 
@@ -102,7 +103,8 @@ export function isProviderOptions(target: unknown): target is ProviderOptions {
     return true;
   }
 
-  if (_isKey((target as ProviderUseExisting).useExisting)) {
+  // FIXED `useExisting` 同样支持类 token，保持别名按身份解析。
+  if (isInjectToken((target as ProviderUseExisting).useExisting)) {
     return true;
   }
 

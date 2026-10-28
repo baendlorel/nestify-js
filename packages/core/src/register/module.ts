@@ -1,6 +1,12 @@
 import type { NestifyInstance } from '@core/types/instance.js';
-import type { NestifyOptions, DynamicModule, InheritedModuleMeta, ProviderOptions } from '@core/types/injection.js';
-import { type Constructor, type SSKey } from '@nestify-js/shared';
+import type {
+  NestifyOptions,
+  DynamicModule,
+  InheritedModuleMeta,
+  InjectToken,
+  ProviderOptions,
+} from '@core/types/injection.js';
+import { type Constructor } from '@nestify-js/shared';
 
 import { toDynamicModule, toModuleClass } from '@core/common/index.js';
 import { tryToGetGlobalToken } from '@core/common/inject-keys.js';
@@ -113,10 +119,11 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
       app.injector.createInstance(opts.registerGlobalMiddlewares![i]);
     }
 
-    const registerGlobal = (list: ProviderOptions[] | undefined, push: (token: SSKey) => void) => {
+    const registerGlobal = (list: ProviderOptions[] | undefined, push: (token: InjectToken) => void) => {
       for (let i = 0; i < (list ?? []).length; i++) {
         const providerOptions = list![i];
         app.injector.createInstance(providerOptions);
+        // FIXED 全局中间件 token 改用 `ph.getToken`（类 → 构造函数身份），不再退化为类名字符串。
         push(ph.getToken(providerOptions));
       }
     };
