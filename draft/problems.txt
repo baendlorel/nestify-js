@@ -28,17 +28,18 @@ packages/core 问题清单
 ✅ 7. JWT 声明的算法与实际签名算法不一致，验证时也不校验 header
 位置：packages/core/src/types/auth.ts:38、packages/core/src/auth/jwt.ts:76、packages/core/src/auth/jwt.ts:102、packages/core/src/auth/jwt.ts:166
 
-8. JWT 过期时间边界及类型校验不正确
-位置：packages/core/src/auth/jwt.ts:181
-复现：expiresIn 为 1 秒时，恰到 exp 秒的令牌仍被接受。代码同时用真值判断 exp，因此 exp=0 不会检查；也没有验证 exp 是有限数字。
-影响：过期或无效的时间声明可能被接受。
-建议：严格校验声明类型，在 now >= exp + tolerance 时拒绝，并覆盖边界和无效值。
+✅ 8. JWT 过期时间边界及类型校验不正确
+位置：packages/core/src/auth/jwt.ts:166、packages/core/src/auth/jwt.ts:182、packages/core/src/auth/jwt.ts:250
+测试：packages/core/tests/jwt.test.ts
 
 9. DI 以类名代替类身份，导致不同类发生 token 冲突
 位置：packages/core/src/register/lazy-injector.ts:34、packages/core/src/register/provider.ts:30、packages/core/src/register/provider.ts:76
 复现：两个不同的 class Service 同时注册时，第二个类的查找返回第一个类的实例。
 影响：跨模块、第三方库或构建压缩产生同名类时，注入错误实例，甚至引发错误的权限或业务行为。
 建议：类 token 使用构造函数身份；字符串和 symbol token 保持独立。
+-- 已核对 NestJS：`InjectionToken = string | symbol | Type`，类 provider 直接以构造函数作为 Map key，`name` 仅用于日志/报错
+-- 待确认方案：A 对齐 NestJS（构造函数即 token）；B 仅注册时检测同名冲突；C A + 类名字符串兜底
+
 
 10. 模块隔离可以被 Symbol 字段和 useExisting 绕过
 位置：packages/core/src/register/expect-module.ts:198、packages/core/src/register/lazy-injector.ts:113、packages/core/src/register/lazy-injector.ts:137

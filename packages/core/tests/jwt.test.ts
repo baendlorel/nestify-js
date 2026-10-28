@@ -138,3 +138,82 @@ describe('JwtService HS256 signatures', () => {
     }
   });
 });
+
+describe('JwtService time claims', () => {
+  const nowSeconds = 1767225600;
+
+  function tokenWith(payload: Record<string, unknown>) {
+    return standardToken({ alg: 'HS256', typ: 'JWT' }, { sub: 'user', ...payload });
+  }
+
+  function useTime(seconds: number) {
+    vi.useFakeTimers().setSystemTime(new Date(seconds * 1000));
+  }
+
+  it('rejects a token as soon as `now` reaches `exp`', async () => {
+    const token = await tokenWith({ exp: nowSeconds });
+    const jwt = new JwtService({ secret });
+
+    useTime(nowSeconds - 1);
+    expect(jwt.verify(token)).toMatchObject({ sub: 'user' });
+
+    useTime(nowSeconds);
+    expect(() => jwt.verify(token)).toThrow('Token expired');
+  });
+
+  it('rejects an `exp` of 0 instead of ignoring it', async () => {
+    const token = await tokenWith({ exp: 0 });
+    useTime(nowSeconds);
+    expect(() => new JwtService({ secret }).verify(token)).toThrow('Token expired');
+  });
+
+  it.each([null, '9999999999', {}, [], true])('rejects a malformed `exp` claim: %j', async (exp) => {
+    const token = await tokenWith({ exp });
+    useTime(nowSeconds);
+    expect(() => new JwtService({ secret }).verify(token)).toThrow("Invalid 'exp' claim");
+  });
+
+  it('applies `clockTolerance` at the expiration boundary', async () => {
+    const token = await tokenWith({ exp: nowSeconds - 5 });
+    const jwt = new JwtService({ secret });
+    useTime(nowSeconds);
+
+    expect(() => jwt.verify(token, { clockTolerance: 4 })).toThrow('Token expired');
+    expect(() => jwt.verify(token, { clockTolerance: 5 })).toThrow('Token expired');
+    expect(jwt.verify(token, { clockTolerance: 6 })).toMatchObject({ sub: 'user' });
+  });
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, '5'])('rejects an invalid `clockTolerance`: %j', async (value) => {
+    const token = await tokenWith({});
+    const jwt = new JwtService({ secret });
+    useTime(nowSeconds);
+
+    expect(() =>
+      // @ts-expect-error invalid tolerances must be rejected at runtime as well
+      jwt.verify(token, { clockTolerance: value }),
+    ).toThrow('clockTolerance must be a non-negative finite number representing seconds');
+  });
+
+  it('accepts at `nbf` and rejects before it', async () => {
+    const token = await tokenWith({ nbf: nowSeconds + 1 });
+    const jwt = new JwtService({ secret });
+
+    useTime(nowSeconds);
+    expect(() => jwt.verify(token)).toThrow('Token not yet valid');
+
+    useTime(nowSeconds + 1);
+    expect(jwt.verify(token)).toMatchObject({ sub: 'user' });
+  });
+
+  it.each([null, '9999999999', {}, true])('rejects a malformed `nbf` claim: %j', async (nbf) => {
+    const token = await tokenWith({ nbf });
+    useTime(nowSeconds);
+    expect(() => new JwtService({ secret }).verify(token)).toThrow("Invalid 'nbf' claim");
+  });
+
+  it('skips the expiration check when `ignoreExpiration` is set', async () => {
+    const token = await tokenWith({ exp: nowSeconds - 10 });
+    useTime(nowSeconds);
+    expect(new JwtService({ secret }).verify(token, { ignoreExpiration: true })).toMatchObject({ sub: 'user' });
+  });
+});

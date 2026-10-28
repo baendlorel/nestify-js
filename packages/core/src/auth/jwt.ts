@@ -159,6 +159,39 @@ export class JwtService {
   }
 
   /**
+   * Read an optional NumericDate claim(RFC 7519 section 2).
+   * - Absent claims return `undefined`
+   * - Malformed claims(not a finite number) are rejected
+   */
+  private readNumericDateClaim(payload: JwtPayload, claim: 'exp' | 'nbf'): number | undefined {
+    // FIXED 不再用真值判断声明是否存在，改为判断属性是否存在，因此 exp / nbf 为 0 时同样会被校验。
+    if (!Object.prototype.hasOwnProperty.call(payload, claim)) {
+      return undefined;
+    }
+    const value = payload[claim];
+    // FIXED 严格校验时间声明必须是有限数字，避免 NaN / 字符串 / null 参与比较时静默通过或被当成过期。
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new UnauthorizedException(`Invalid '${claim}' claim`);
+    }
+    return value;
+  }
+
+  /**
+   * Validate and normalize `clockTolerance`
+   */
+  private getClockTolerance(options: JwtVerifyOptions): number {
+    // FIXED clockTolerance 改为严格校验（必须是非负有限数字），不再用 `|| 0` 把 NaN / 负数隐式兜底为 0。
+    const tolerance = options.clockTolerance;
+    if (tolerance === undefined) {
+      return 0;
+    }
+    if (typeof tolerance !== 'number' || !Number.isFinite(tolerance) || tolerance < 0) {
+      throw new Error('clockTolerance must be a non-negative finite number representing seconds');
+    }
+    return tolerance;
+  }
+
+  /**
    * Verify and decode a JWT token
    */
   verify<T = JwtPayload>(token: string, options?: JwtVerifyOptions): T {
@@ -212,21 +245,22 @@ export class JwtService {
 
     // Verify claims
     const now = Math.floor(Date.now() / 1000);
+    const clockTolerance = this.getClockTolerance(mergedOptions);
 
     // Check expiration
-    if (!mergedOptions.ignoreExpiration && payload.exp) {
-      const clockTolerance = mergedOptions.clockTolerance || 0;
-      if (now > payload.exp + clockTolerance) {
+    if (!mergedOptions.ignoreExpiration) {
+      const exp = this.readNumericDateClaim(payload, 'exp');
+      // FIXED 过期判定由 `now > exp + tolerance` 改为 `now >= exp + tolerance`，令牌在 exp 对应的那一秒即视为过期。
+      if (exp !== undefined && now >= exp + clockTolerance) {
         throw new UnauthorizedException('Token expired');
       }
     }
 
     // Check not before
-    if (payload.nbf) {
-      const clockTolerance = mergedOptions.clockTolerance || 0;
-      if (now < payload.nbf - clockTolerance) {
-        throw new UnauthorizedException('Token not yet valid');
-      }
+    const nbf = this.readNumericDateClaim(payload, 'nbf');
+    // FIXED nbf 与 exp 保持一致的边界语义：令牌在 nbf 对应的那一秒即可使用，且不再漏掉 nbf 为 0 的情况。
+    if (nbf !== undefined && now < nbf - clockTolerance) {
+      throw new UnauthorizedException('Token not yet valid');
     }
 
     // Check audience
