@@ -331,4 +331,65 @@ describe('cron lifecycle', () => {
     expect(run).toHaveBeenCalledTimes(1);
     await app.close();
   });
+
+  it('binds the same method of different instances separately', async () => {
+    vi.useFakeTimers();
+    const run = vi.fn();
+
+    class Task {
+      @Cron('* * * * * *', 'shared')
+      handle() {
+        run();
+      }
+    }
+
+    const app = cronApp();
+    // both instances share the same prototype method, so a method-only key
+    // would silently drop the second job
+    bindCronJob(app, new Task(), Task);
+    bindCronJob(app, new Task(), Task);
+
+    expect(app.getCronJobStates()).toHaveLength(2);
+
+    app.launchCronJobs();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(run).toHaveBeenCalledTimes(2);
+    await app.close();
+  });
+
+  it('does not duplicate the timer when restarted while the handler is still pending', async () => {
+    vi.useFakeTimers();
+    const run = vi.fn();
+    let release!: () => void;
+
+    class Task {
+      @Cron('* * * * * *', 'restart-pending')
+      async handle() {
+        run();
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+    }
+
+    const app = cronApp();
+    bindCronJob(app, new Task(), Task);
+    app.launchCronJobs();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(run).toHaveBeenCalledTimes(1);
+
+    // restart while the first execution is still awaited
+    app.stopCronJob('restart-pending');
+    app.startCronJob('restart-pending');
+
+    // the stale execution must not schedule another timer when it completes
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    // exactly one chain is left: the restarted one runs once, not twice
+    expect(run).toHaveBeenCalledTimes(2);
+    await app.close();
+  });
 });

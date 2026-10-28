@@ -132,7 +132,16 @@ class StackedController {
 
 @Module({
   controllers: [StackedController],
-  providers: [PipeCloser, PipeUpper, GuardCloser, GuardUpper, InterceptorCloser, InterceptorUpper, FilterCloser, FilterUpper],
+  providers: [
+    PipeCloser,
+    PipeUpper,
+    GuardCloser,
+    GuardUpper,
+    InterceptorCloser,
+    InterceptorUpper,
+    FilterCloser,
+    FilterUpper,
+  ],
 })
 class App {}
 

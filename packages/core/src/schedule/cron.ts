@@ -18,14 +18,20 @@ interface JobData {
   nextTime: number;
   timer: NodeJS.Timeout | null;
   running: boolean;
+  /**
+   * Bumped on every start/stop, so an execution of a previous round can never
+   * schedule a timer for the current one.
+   */
+  generation: number;
 }
 
 interface CronStore {
   jobs: JobData[];
   /**
-   * Targets already bound for one application.
+   * Methods already bound, grouped by the instance they belong to.
+   * - Keyed by instance, so two instances of the same class keep their own jobs
    */
-  boundTargets: WeakSet<AnyFunction>;
+  boundTargets: WeakMap<object, WeakSet<AnyFunction>>;
 }
 
 export function Cron(expression: string, uid?: string): AnyFunction {
@@ -53,6 +59,42 @@ function longTimeout(job: JobData, fn: () => void, delay: number): void {
   }
 }
 
+function startJob(job: JobData) {
+  // ! Won't start the running jobs.
+  if (job.running) {
+    return;
+  }
+
+  // FIXED 每次启动推进代次：上一轮仍在执行的 handler 完成后不能再调度计时器，避免重复计时。
+  job.generation++;
+  job.running = true;
+  job.fn();
+}
+
+function stopJob(job: JobData) {
+  // FIXED 停止时也推进代次，使仍在进行中的执行在结束后无法重新调度。
+  job.generation++;
+  job.running = false;
+
+  if (job.timer) {
+    clearTimeout(job.timer);
+    job.timer = null;
+  }
+  job.nextTime = -1;
+}
+
+/**
+ * Methods already bound for one instance.
+ */
+function getBoundTargets(store: CronStore, instance: object): WeakSet<AnyFunction> {
+  let targets = store.boundTargets.get(instance);
+  if (!targets) {
+    targets = new WeakSet();
+    store.boundTargets.set(instance, targets);
+  }
+  return targets;
+}
+
 function initMethods(app: NestifyInstance, store: CronStore) {
   // If app's methods are already initialized, skip it.
   if (typeof app.launchCronJobs === 'function') {
@@ -63,12 +105,7 @@ function initMethods(app: NestifyInstance, store: CronStore) {
 
   app.launchCronJobs = () => {
     for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i];
-      // ! Won't start the running jobs.
-      if (!job.running) {
-        job.running = true;
-        job.fn();
-      }
+      startJob(jobs[i]);
     }
   };
 
@@ -81,12 +118,11 @@ function initMethods(app: NestifyInstance, store: CronStore) {
     const job = jobs.find((j) => j.uid === uid);
 
     // Non-exist or already running, no need to start again
-    if (!job || job.running) {
+    if (!job) {
       return;
     }
 
-    job.running = true;
-    job.fn();
+    startJob(job);
   };
 
   app.stopCronJob = (uid: string) => {
@@ -100,13 +136,7 @@ function initMethods(app: NestifyInstance, store: CronStore) {
       return;
     }
 
-    job.running = false;
-
-    if (job.timer) {
-      clearTimeout(job.timer);
-      job.timer = null;
-    }
-    job.nextTime = -1;
+    stopJob(job);
   };
 
   app.getCronJobStates = () =>
@@ -119,13 +149,7 @@ function initMethods(app: NestifyInstance, store: CronStore) {
 
   app.addHook('onClose', (_app, done) => {
     for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i];
-      job.running = false;
-      if (job.timer) {
-        clearTimeout(job.timer);
-        job.timer = null;
-      }
-      job.nextTime = -1;
+      stopJob(jobs[i]);
     }
     jobs.length = 0;
     _stores.delete(app);
@@ -143,7 +167,7 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
   const cronMeta = metaGet<Record<string, CronMeta>>(sourceClass, [sym.cron]);
   const store = getOrInsertWeak<NestifyInstance, CronStore>(_stores, app, {
     jobs: [],
-    boundTargets: new WeakSet(),
+    boundTargets: new WeakMap(),
   });
   initMethods(app, store);
 
@@ -151,16 +175,18 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
     return;
   }
 
+  // FIXED 去重改为按「实例 + 方法」：同一类的不同实例各自注册任务，同一实例的重复注册仍只算一次。
+  const boundTargets = getBoundTargets(store, instance);
   const err = (...args: Parameters<typeof app.log.error>) => app.log.error(...args);
   const entries = _entries(cronMeta);
   for (let i = 0; i < entries.length; i++) {
     const target = instance[entries[i][0]] as () => void;
 
     // ! The same instance can be registered under several tokens, bind each method once
-    if (store.boundTargets.has(target)) {
+    if (boundTargets.has(target)) {
       continue;
     }
-    store.boundTargets.add(target);
+    boundTargets.add(target);
 
     const { expression, uid } = entries[i][1];
 
@@ -169,12 +195,26 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
         return;
       }
 
+      // FIXED 记录本次调度的代次，停止或重启后旧执行完成时不再安排下一轮。
+      const generation = job.generation;
+
       job.nextTime = CronExpressionParser.parse(expression).next().getTime();
       // & Parse every time so delta is always positive.
       // & Sharing the same parsed object might lead to a negative delta.
       const delta = job.nextTime - Date.now();
 
-      longTimeout(job, () => promiseTry(target, instance).catch(err).finally(fn), delta);
+      longTimeout(
+        job,
+        () =>
+          promiseTry(target, instance)
+            .catch(err)
+            .finally(() => {
+              if (job.generation === generation) {
+                fn();
+              }
+            }),
+        delta,
+      );
     };
 
     const job: JobData = {
@@ -184,6 +224,7 @@ export function bindCronJob(app: NestifyInstance, instance: InstanceType<Constru
       nextTime: -1,
       timer: null,
       running: false,
+      generation: 0,
     };
 
     store.jobs.push(job);
