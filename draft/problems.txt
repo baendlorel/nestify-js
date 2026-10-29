@@ -182,7 +182,16 @@ NestJS 对照：允许同一 controller 声明在多个模块中（`RoutesResolv
 
 33. ✅ 无所谓。字符串 / symbol 型 provider 无法被 exports
 
-✅ 34.彻底删除 `@ApiSchema`
+✅ 34. 彻底删除 `@ApiSchema` 与 `@Opt`
+位置：packages/core/src/register/route/controller.ts、packages/shared/src/sym.ts、packages/core/src/types/index.ts
+决定：不再给 Fastify 原生留任何路由级入口（你的要求：简单）+ 请求校验只走管道。
+- 删除 `decorators/router/api-schema.ts` 与 `decorators/router/opt.ts`，以及对应测试 `api-schema.test.ts`。
+- 连带删除：`sym.route.apiSchema` / `sym.route.opt`、`metaSetSchema()` / `metaSetOpt()`、`RouteApiSchema` / `RouteOptType`、`RouteConfig` 上的两个字段、`expect-module` 里的 opt 校验、`index.ts` 导出。
+- 路由注册不再读取任何 Fastify 路由选项：`app.route({ schema, method, url, handler, validatorCompiler: () => () => true })`，`schema` 只来自第一个带 schema 的管道（`metaGetFirstMethodPipe`），供 Swagger / 响应序列化使用。
+- 随之移除成为死代码的路由级 `validatorCompiler` 传递：`createHandler` 第 4 参、`ExecutionContext.validatorCompiler`、`runner` 中的读取；内置管道直接用 `req.server.validatorCompiler`（应用级）。
+- 代价（已接受）：`bodyLimit` 等按路由的 Fastify 选项不再可用；如需自定义校验器用 `fastify.setValidatorCompiler`。
+- 文档：README / README.zh.md 的「Route Options」改为「Route Schema」，只讲管道。
+验证：`pnpm exec vitest run packages/core/tests` → 19 个文件 / 149 项通过（剔除 4 项依赖 `@Opt` 的用例）；`pnpm -C packages/core run check` 通过。
 
 35. `startCronJob` / `stopCronJob` 在 uid 重复时只作用于第一个任务
 位置：packages/core/src/schedule/cron.ts:91、packages/core/src/schedule/cron.ts:100
@@ -192,7 +201,7 @@ NestJS 对照：允许同一 controller 声明在多个模块中（`RoutesResolv
 
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests：19 个文件、153 项通过（删除 `api-schema.test.ts` 后 5 项随之移除）。
+- pnpm exec vitest run packages/core/tests：19 个文件、149 项通过（删除 `api-schema.test.ts` 5 项 + 4 项依赖 `@Opt` 的用例）。
 - pnpm -C packages/core run check（tsc --noEmit）：通过。
 - 第一轮 23 项逐条复核：实现均在位；第 11 项仍为有意设计（factory 按声明顺序取依赖）。
 - 新增回归用例：http-method（方法名校验、尾斜杠强制等价）、provider-values（别名声明顺序 / 别名越界）、multipart-integration（文件数量超限 413）、filter-integration（未注册过滤器、响应已发送）、jwt（空密钥、非对象载荷）。

@@ -93,9 +93,8 @@ export class ThrottleGuard extends NestifyGuard {
       return true;
     }
 
-    const { getRequest, getReply } = context.switchToHttp();
-    const request = getRequest<FastifyRequest>();
-    const reply = getReply<FastifyReply>();
+    const request = context.switchToHttp().getRequest<FastifyRequest>();
+    const reply = context.switchToHttp().getReply<FastifyReply>();
 
     if (this.handled.has(request)) {
       return true;

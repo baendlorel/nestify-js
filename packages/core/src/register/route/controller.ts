@@ -1,6 +1,6 @@
 import type { NestifyInstance } from '@core/types/instance.js';
 import { type Constructor } from '@nestify-js/shared';
-import { _define, _values, sym, toAssigned } from '@nestify-js/shared';
+import { _define, _values, sym } from '@nestify-js/shared';
 
 import {
   metaGetController,
@@ -22,7 +22,7 @@ import { PipeBody } from '@core/pipes/body.pipe.js';
 import { PipeParams } from '@core/pipes/params.pipe.js';
 import { PipeQuery } from '@core/pipes/query.pipe.js';
 import { NestifyError } from '@core/asserts/error.js';
-import type { PipeFullSchema, PipeOptions } from '@core/types/middleware.js';
+import type { PipeOptions } from '@core/types/middleware.js';
 import ph from '@core/register/provider.js';
 
 function concatRoute(...routes: string[][]): string {
@@ -70,17 +70,6 @@ function assertPipeSchemas(app: NestifyInstance, pipes: PipeOptions[], route: st
   }
 }
 
-function rejectRouteRequestSchemas(schema: PipeFullSchema | undefined, route: string) {
-  if (!schema) {
-    return;
-  }
-  for (const key of requestParts) {
-    if (schema[key] !== undefined) {
-      throw new NestifyError(`Route ${route}: schema.${key} in route options is not supported; use a Nestify pipe`);
-    }
-  }
-}
-
 const registeredControllers = new WeakMap<NestifyInstance, Map<Constructor, Set<string>>>();
 
 export function registerController(app: NestifyInstance, controller: Constructor, modulePrefix: string[]) {
@@ -118,7 +107,6 @@ export function registerController(app: NestifyInstance, controller: Constructor
   _values(routes).forEach((routeConfig) => {
     const { field, method, route } = routeConfig[sym.route.base];
     const url = concatRoute(modulePrefix, controllerPrefix, route);
-    const opts = routeConfig[sym.route.opt] ?? {};
 
     // Get the original method from the instance
     const origin = (...args: any[]) => instance[field](...args);
@@ -130,21 +118,17 @@ export function registerController(app: NestifyInstance, controller: Constructor
     const filter = createFilter(app, getFilters(field));
     const pipes = getPipes(field);
     assertPipeSchemas(app, pipes, url);
-    rejectRouteRequestSchemas(opts.schema, url);
     const pipe = createPipe(app, pipes);
 
-    const firstMethodPipe = metaGetFirstMethodPipe(controller, field);
-    const firstMethodPipeSchema = firstMethodPipe?.schema;
-    const schema = toAssigned(opts.schema, firstMethodPipeSchema);
+    // FIXED 路由 schema 只来自管道（用于响应序列化与文档），请求校验在管道中执行。
+    const schema = metaGetFirstMethodPipe(controller, field)?.schema;
 
     // Pass the original method (with correct name) and instance for 'this' binding
-    const handler = createHandler(controller, origin, { interceptor, guard, filter, pipe }, opts.validatorCompiler);
+    const handler = createHandler(controller, origin, { interceptor, guard, filter, pipe });
 
     console.log(`Registered - ${url} (${method.toUpperCase()})`);
 
-    const { attachValidation: _attachValidation, ...routeOptions } = opts;
     app.route({
-      ...routeOptions,
       schema,
       method,
       url,

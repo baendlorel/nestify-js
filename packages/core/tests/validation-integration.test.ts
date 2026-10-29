@@ -15,7 +15,6 @@ import {
   NestifyGuard,
   NestifyInterceptor,
   NestifyInterceptorNextHandler,
-  Opt,
   Params,
   PipeBody,
   PipeQuery,
@@ -152,31 +151,6 @@ describe('request validation', () => {
     }
   });
 
-  it('uses route-specific compilers for pipe schemas not attached to the route', async () => {
-    const schema = { type: 'object' };
-    const routeCompiler = vi.fn(() => () => ({ value: { route: true } }));
-    @Controller()
-    @UsePipes({ pipe: PipeBody, schema: { body: schema } })
-    class ControllerClass {
-      @Post()
-      @Opt({ validatorCompiler: routeCompiler })
-      handle(body: unknown) {
-        return body;
-      }
-    }
-    @Module({ controllers: [ControllerClass] })
-    class App {}
-    const app = createApp();
-    app.setValidatorCompiler(() => () => ({ value: { route: false } }));
-    await apply(app, { rootModule: App });
-    try {
-      expect((await app.inject({ method: 'POST', url: '/', payload: {} })).json()).toEqual({ route: true });
-      expect(routeCompiler).toHaveBeenCalledOnce();
-    } finally {
-      await app.close();
-    }
-  });
-
   it('does not re-run the route validator in the built-in pipe', async () => {
     const validate = vi.fn((body: unknown) => ({ value: body }));
     @Controller()
@@ -252,31 +226,6 @@ describe('request validation', () => {
     }
   });
 
-  it('uses a route-specific compiler for a built-in method pipe', async () => {
-    const validate = vi.fn(() => ({ value: false }));
-    @Controller()
-    class ControllerClass {
-      @Post()
-      @Opt({ validatorCompiler: () => validate })
-      @Body({ type: 'object' })
-      handle(body: unknown) {
-        return { body };
-      }
-    }
-    @Module({ controllers: [ControllerClass] })
-    class App {}
-    const app = createApp();
-    app.setValidatorCompiler(() => () => ({ value: true }));
-    await apply(app, { rootModule: App });
-    try {
-      const response = await app.inject({ method: 'POST', url: '/', payload: {} });
-      expect(response.json()).toEqual({ body: false });
-      expect(validate).toHaveBeenCalledOnce();
-    } finally {
-      await app.close();
-    }
-  });
-
   it('rejects request schemas that the built-in pipe does not validate', async () => {
     @Controller()
     class ControllerClass {
@@ -332,28 +281,6 @@ describe('request validation', () => {
     await apply(app, { rootModule: App });
     try {
       expect((await app.inject({ method: 'POST', url: '/', payload: {} })).statusCode).toBe(400);
-    } finally {
-      await app.close();
-    }
-  });
-
-  it('ignores attachValidation and still rejects invalid pipe input', async () => {
-    @Controller()
-    class ControllerClass {
-      @Post()
-      @Opt({ attachValidation: true })
-      @Body({ type: 'object', required: ['name'] })
-      handle() {
-        return 'unreachable';
-      }
-    }
-    @Module({ controllers: [ControllerClass] })
-    class App {}
-    const app = createApp();
-    await apply(app, { rootModule: App });
-    try {
-      const response = await app.inject({ method: 'POST', url: '/', payload: {} });
-      expect(response.statusCode).toBe(400);
     } finally {
       await app.close();
     }
@@ -468,25 +395,6 @@ describe('request validation', () => {
     await apply(app, { rootModule: App });
     try {
       expect((await app.inject({ method: 'POST', url: '/', payload: {} })).json()).toEqual({ ok: 'yes' });
-    } finally {
-      await app.close();
-    }
-  });
-
-  it('rejects request schemas in Fastify route options', async () => {
-    @Controller()
-    class ControllerClass {
-      @Post()
-      @Opt({ schema: { body: { type: 'object' } } })
-      handle() {
-        return 'unreachable';
-      }
-    }
-    @Module({ controllers: [ControllerClass] })
-    class App {}
-    const app = createApp();
-    try {
-      await expect(apply(app, { rootModule: App })).rejects.toThrow(/schema\.body in route options/);
     } finally {
       await app.close();
     }

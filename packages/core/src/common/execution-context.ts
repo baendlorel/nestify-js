@@ -9,7 +9,6 @@ import {
   ArgsTypeWebSocket,
 } from '@core/types/middleware-context.js';
 import { FastifyRequest, FastifyReply } from 'fastify';
-import type { FastifyInstance } from 'fastify';
 
 /**
  * ExecutionContext extends ArgumentsHost to provide reflection metadata
@@ -21,7 +20,6 @@ export class ExecutionContext<CT extends keyof ArgsTypeMap = 'http'> {
     private readonly contextType: CT,
     private readonly controller: Constructor,
     private readonly contextHandler: AnyFunction,
-    readonly validatorCompiler?: FastifyInstance['validatorCompiler'],
   ) {}
 
   /**

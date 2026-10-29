@@ -53,12 +53,6 @@ export namespace sym {
     export const base = Symbol('base');
 
     /**
-     * Stores route options of `fastify.route(opts)`
-     * - Priority: `opts.schema` < `@Pipe({ schema })`
-     */
-    export const opt = Symbol('opt');
-
-    /**
      * Stores property paths of the handler argument `request: FastifyRequest`
      * - if the handler is decorated by `@Args('body.name','body.age')`, then the handler will be called as `handler(request.body.name, request.body.age, reply)`
      * - `reply` will always be the last argument

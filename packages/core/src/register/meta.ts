@@ -1,5 +1,5 @@
 import { type Constructor, type SSKey } from '@nestify-js/shared';
-import type { RouteBasic, RouteConfig, RouteOptType } from '@core/types/index.js';
+import type { RouteBasic, RouteConfig } from '@core/types/index.js';
 import type {
   ProviderMeta,
   ControllerMeta,
@@ -70,13 +70,6 @@ export function metaSetRoute(context: ClassMethodDecoratorContext, httpMethod: s
 
 export function metaGetRoute(cls: Constructor): Record<SSKey, RouteConfig> {
   return metaGet(cls, [sym.route.root]) as Record<SSKey, RouteConfig>;
-}
-
-/**
- * Metadata is stored at: `class[sym.metadata][sym.root][sym.route][context.name][sym.route.opt]`
- */
-export function metaSetOpt(context: ClassMethodDecoratorContext, opts: RouteOptType): boolean {
-  return metaSet(context, [sym.route.root, context.name, sym.route.opt], opts);
 }
 
 /**

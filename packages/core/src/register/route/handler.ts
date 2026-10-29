@@ -1,6 +1,6 @@
 import type { AnyFunction, Constructor } from '@core/types/primitives.js';
 import type { FilterTask, GuardTask, InterceptorTask, PipeTask } from '@core/types/middleware.js';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { TaskifyAsync } from 'serial-task';
 import { expectArray } from '@core/asserts/index.js';
@@ -15,15 +15,10 @@ interface MiddlewareGroup {
   filter: TaskifyAsync<FilterTask>;
 }
 
-export function createHandler(
-  controller: Constructor,
-  method: AnyFunction,
-  middlewares: MiddlewareGroup,
-  validatorCompiler?: FastifyInstance['validatorCompiler'],
-) {
+export function createHandler(controller: Constructor, method: AnyFunction, middlewares: MiddlewareGroup) {
   const { guard, interceptor, pipe, filter } = middlewares;
   return async function (request: FastifyRequest, reply: FastifyReply) {
-    const context = new ExecutionContext([request, reply], 'http', controller, method, validatorCompiler);
+    const context = new ExecutionContext([request, reply], 'http', controller, method);
     let interceptorHandlers: NestifyInterceptorNextHandler[] = [];
 
     try {

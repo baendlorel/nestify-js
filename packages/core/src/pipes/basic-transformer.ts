@@ -32,7 +32,7 @@ class BasicTransformer {
     part: 'body' | 'params' | 'querystring',
     schema: PipeSchema,
   ): Validator {
-    let compiler = context.validatorCompiler ?? req.server.validatorCompiler;
+    let compiler = req.server.validatorCompiler;
     if (!_isFunction(compiler)) {
       compiler = this.defaultCompilers.get(req.server);
       if (!compiler) {
