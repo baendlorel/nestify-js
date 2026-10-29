@@ -103,19 +103,28 @@ class UserController {
 
 ### 路由选项
 
-- `@ApiSchema({ summary, description, tags, ... })` — OpenAPI/Swagger 的 schema 信息。
-- `@Opt(options)` — 额外的 Fastify 路由选项（例如 `{ bodyLimit: 1048576 }`）。
+`@Opt(options)` — 额外的 Fastify 路由选项（例如 `{ bodyLimit: 1048576 }`、`schema.response`）。
+
+请求 schema（`body` / `params` / `querystring` / `headers`）**不写在这里**：请求校验始终在管道里完成，
+请写在内置管道上。管道上的 schema 会被转发到路由 schema，因此 Swagger 依旧能记录它们。
 
 ```typescript
 @Controller('/files')
 class FileController {
   @Post('/upload')
-  @ApiSchema({ summary: '上传文件', tags: ['files'] })
+  @Body({ type: 'object', required: ['name'] })   // ← 校验写在这里
   @Opt({ bodyLimit: 1048576 })
-  uploadFile() {
+  uploadFile(body: { name: string }) {
     return { uploaded: true };
   }
 }
+```
+
+在 `@Opt({ schema })` 里写请求 schema 会在启动期报错：
+
+```
+Route /files/upload: schema.body in route options is not supported, request validation only runs in pipes.
+Declare it on @Body({ schema }) instead
 ```
 
 ## 依赖注入

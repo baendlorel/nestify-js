@@ -10,14 +10,7 @@ import type {
   ProviderOptions,
   InjectToken,
 } from '@core/types/injection.js';
-import type {
-  RouteApiSchema,
-  InterceptorGetter,
-  GuardGetter,
-  FilterGetter,
-  PipeOptions,
-  PipeGetter,
-} from '@core/types/middleware.js';
+import type { InterceptorGetter, GuardGetter, FilterGetter, PipeOptions, PipeGetter } from '@core/types/middleware.js';
 
 import { ReflectDeep } from 'reflect-deep';
 import { concatArr, sym, _isArray } from '@nestify-js/shared';
@@ -84,13 +77,6 @@ export function metaGetRoute(cls: Constructor): Record<SSKey, RouteConfig> {
  */
 export function metaSetOpt(context: ClassMethodDecoratorContext, opts: RouteOptType): boolean {
   return metaSet(context, [sym.route.root, context.name, sym.route.opt], opts);
-}
-
-/**
- * Metadata is stored at: `class[sym.metadata][sym.root][sym.route][context.name][sym.route.apiSchema]`
- */
-export function metaSetSchema(context: ClassMethodDecoratorContext, schema: RouteApiSchema): boolean {
-  return metaSet(context, [sym.route.root, context.name, sym.route.apiSchema], schema);
 }
 
 /**

@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { FastifySchema } from 'fastify';
 import type { Constructor, SSKey, OrPromise, AnyFunction } from '@nestify-js/shared';
 import type { ExecutionContext } from '@core/common/execution-context.js';
 import type { InjectToken } from './injection.js';
@@ -34,8 +33,6 @@ export interface PipeFullSchema {
   headers?: PipeSchema;
   response?: PipeSchema;
 }
-
-export type RouteApiSchema = Omit<FastifySchema, keyof PipeFullSchema>;
 
 export interface PipeOptions {
   /**

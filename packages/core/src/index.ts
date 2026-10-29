@@ -1,7 +1,6 @@
 // router decorators
 export { Delete, Get, Patch, Post, Put, HttpMethod } from './decorators/router/http-methods.js';
 export { Opt } from './decorators/router/opt.js';
-export { ApiSchema } from './decorators/router/api-schema.js';
 export { Controller } from './decorators/router/controller.js';
 
 export { Inject } from './decorators/inject.js';
@@ -46,7 +45,6 @@ export type {
   PipeSchema,
   PipeFullSchema,
   PipeOptions,
-  RouteApiSchema,
 } from './types/middleware.js';
 
 export type { NestifyOptions } from '@core/types/index.js';

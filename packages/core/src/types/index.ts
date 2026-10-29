@@ -11,8 +11,7 @@ import type {
   RouteGenericInterface,
   RouteShorthandOptions,
 } from 'fastify';
-import type { RouteApiSchema } from './middleware.js';
-import { type SSKey } from '@nestify-js/shared';
+import type { SSKey } from '@nestify-js/shared';
 import { sym } from '@nestify-js/shared';
 
 export * from './auth.js';
@@ -48,5 +47,4 @@ export interface RouteConfig {
   [sym.route.base]: RouteBasic;
   [sym.route.opt]?: RouteOptType;
   [sym.route.args]?: string[][];
-  [sym.route.apiSchema]?: RouteApiSchema;
 }

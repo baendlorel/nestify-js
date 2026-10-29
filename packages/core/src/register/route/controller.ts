@@ -119,7 +119,6 @@ export function registerController(app: NestifyInstance, controller: Constructor
     const { field, method, route } = routeConfig[sym.route.base];
     const url = concatRoute(modulePrefix, controllerPrefix, route);
     const opts = routeConfig[sym.route.opt] ?? {};
-    const ApiSchema = routeConfig[sym.route.apiSchema]; // Schema info, includes `summary`, `description`, etc.
 
     // Get the original method from the instance
     const origin = (...args: any[]) => instance[field](...args);
@@ -132,12 +131,11 @@ export function registerController(app: NestifyInstance, controller: Constructor
     const pipes = getPipes(field);
     assertPipeSchemas(app, pipes, url);
     rejectRouteRequestSchemas(opts.schema, url);
-    rejectRouteRequestSchemas(ApiSchema, url);
     const pipe = createPipe(app, pipes);
 
     const firstMethodPipe = metaGetFirstMethodPipe(controller, field);
     const firstMethodPipeSchema = firstMethodPipe?.schema;
-    const schema = toAssigned(opts.schema, ApiSchema, firstMethodPipeSchema);
+    const schema = toAssigned(opts.schema, firstMethodPipeSchema);
 
     // Pass the original method (with correct name) and instance for 'this' binding
     const handler = createHandler(controller, origin, { interceptor, guard, filter, pipe }, opts.validatorCompiler);

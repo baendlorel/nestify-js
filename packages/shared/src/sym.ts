@@ -54,15 +54,9 @@ export namespace sym {
 
     /**
      * Stores route options of `fastify.route(opts)`
-     * - Priority: `opts.schema` < `Symbol(RouteApiSchema)` < `@Pipe({ schema })`
+     * - Priority: `opts.schema` < `@Pipe({ schema })`
      */
     export const opt = Symbol('opt');
-
-    /**
-     * Stores info schema like `summary`, `description`, etc. for swagger
-     * - Priority: `opts.schema` < `Symbol(RouteApiSchema)` < `@Pipe({ schema })`
-     */
-    export const apiSchema = Symbol('apiSchema');
 
     /**
      * Stores property paths of the handler argument `request: FastifyRequest`

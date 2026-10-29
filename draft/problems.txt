@@ -171,7 +171,7 @@ NestJS 对照：允许同一 controller 声明在多个模块中（`RoutesResolv
 复现：handler 内 `reply.send()` 后再 throw，默认过滤器仍尝试 `status(500).send(...)`。
 实现：`createDefaultFilter` 开头判断 `reply.sent`，已发送时只对非 `HttpException` 记一条 error 日志并直接返回，不再调用 `status().send()`；未发送时保持原逻辑（HttpException 用自身状态，未知异常统一 500）。
 
-低 / 设计限制（未修复）
+低 / 设计限制
 ==
 
 32. provider 实例是应用级而非模块级，同 token 的重复声明被静默忽略
@@ -180,17 +180,9 @@ NestJS 对照：允许同一 controller 声明在多个模块中（`RoutesResolv
 影响：跨模块复用同一 token 会拿到非预期实例；写错配置也不会报错。
 说明：改为模块级作用域需要每个模块独立 injector，属架构调整，未在本轮改动。
 
-33. 字符串 / symbol 型 provider 无法被 exports
-位置：packages/core/src/register/expect-module.ts:153、packages/core/src/register/expect-module.ts:156
-现状：`exports` 必须是 `providers` 的子数组，且元素会被 `expectInjectable` 当类校验；导出 `{ provide: 'X', useValue }` 报 "Target is not a class"。
-影响：非类 token 只能经由全局模块共享，跨模块传递配置对象不可行。
-说明：需把 `exports` 元素判定从“类”放宽到“token”，同时保留 subarray 校验。
+33. ✅ 无所谓。字符串 / symbol 型 provider 无法被 exports
 
-34. `@ApiSchema` 不能携带请求 schema
-位置：packages/core/src/register/route/controller.ts:134、packages/core/src/register/route/controller.ts:135
-现状：`rejectRouteRequestSchemas` 同时拒绝 `Opt.schema` 与 `ApiSchema` 中的 body / params / querystring，校验只能走管道。
-影响：习惯用 `@ApiSchema` 写 OpenAPI 请求体的项目会在启动期失败。
-说明：这是“校验只走管道”的刻意设计，建议补文档说明。
+✅ 34.彻底删除 `@ApiSchema`
 
 35. `startCronJob` / `stopCronJob` 在 uid 重复时只作用于第一个任务
 位置：packages/core/src/schedule/cron.ts:91、packages/core/src/schedule/cron.ts:100
@@ -200,7 +192,7 @@ NestJS 对照：允许同一 controller 声明在多个模块中（`RoutesResolv
 
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests：19 个文件、154 项通过（新增 9 项回归用例）。
+- pnpm exec vitest run packages/core/tests：19 个文件、153 项通过（删除 `api-schema.test.ts` 后 5 项随之移除）。
 - pnpm -C packages/core run check（tsc --noEmit）：通过。
 - 第一轮 23 项逐条复核：实现均在位；第 11 项仍为有意设计（factory 按声明顺序取依赖）。
 - 新增回归用例：http-method（方法名校验、尾斜杠强制等价）、provider-values（别名声明顺序 / 别名越界）、multipart-integration（文件数量超限 413）、filter-integration（未注册过滤器、响应已发送）、jwt（空密钥、非对象载荷）。

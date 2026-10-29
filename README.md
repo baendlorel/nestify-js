@@ -107,19 +107,29 @@ class UserController {
 
 ### Route Options
 
-- `@ApiSchema({ summary, description, tags, ... })` — OpenAPI/Swagger schema information.
-- `@Opt(options)` — additional Fastify route options (e.g. `{ bodyLimit: 1048576 }`).
+`@Opt(options)` — additional Fastify route options (e.g. `{ bodyLimit: 1048576 }`, `schema.response`).
+
+Request schemas (`body` / `params` / `querystring` / `headers`) are **not** accepted here: request
+validation only runs in pipes, so declare them on the built-in pipes instead. Pipe schemas are
+forwarded to the route schema, which means Swagger keeps documenting them.
 
 ```typescript
 @Controller('/files')
 class FileController {
   @Post('/upload')
-  @ApiSchema({ summary: 'Upload a file', tags: ['files'] })
+  @Body({ type: 'object', required: ['name'] })   // ← validation lives here
   @Opt({ bodyLimit: 1048576 })
-  uploadFile() {
+  uploadFile(body: { name: string }) {
     return { uploaded: true };
   }
 }
+```
+
+Declaring a request schema in `@Opt({ schema })` fails at bootstrap:
+
+```
+Route /files/upload: schema.body in route options is not supported, request validation only runs in pipes.
+Declare it on @Body({ schema }) instead
 ```
 
 ## Dependency Injection
