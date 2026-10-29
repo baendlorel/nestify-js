@@ -101,30 +101,23 @@ class UserController {
 }
 ```
 
-### 路由选项
+### 路由 schema
 
-`@Opt(options)` — 额外的 Fastify 路由选项（例如 `{ bodyLimit: 1048576 }`、`schema.response`）。
+路由上的一切都由装饰器与管道决定，不提供直接传 Fastify 路由选项的入口。
 
-请求 schema（`body` / `params` / `querystring` / `headers`）**不写在这里**：请求校验始终在管道里完成，
-请写在内置管道上。管道上的 schema 会被转发到路由 schema，因此 Swagger 依旧能记录它们。
+- 请求 schema 写在内置管道上：`@Body({ schema })`、`@Params({ schema })`、`@Query({ schema })`，
+  或 `@UsePipes({ pipe, schema })`。
+- 第一个带 `schema` 的管道会被转发到 Fastify 路由，所以 Swagger 与响应序列化照常工作。
 
 ```typescript
 @Controller('/files')
 class FileController {
   @Post('/upload')
-  @Body({ type: 'object', required: ['name'] })   // ← 校验写在这里
-  @Opt({ bodyLimit: 1048576 })
+  @Body({ type: 'object', required: ['name'] })   // ← 校验 + 路由 schema
   uploadFile(body: { name: string }) {
     return { uploaded: true };
   }
 }
-```
-
-在 `@Opt({ schema })` 里写请求 schema 会在启动期报错：
-
-```
-Route /files/upload: schema.body in route options is not supported, request validation only runs in pipes.
-Declare it on @Body({ schema }) instead
 ```
 
 ## 依赖注入
@@ -251,9 +244,9 @@ class ApiController {
 
 管道负责校验和转换输入数据；每个管道的返回值会成为下一个管道的 `input`。校验基于 Fastify 的 `validatorCompiler`。
 
-Nestify 路由的请求校验由管道执行，发生在守卫和拦截器进入阶段之后，而不是 Fastify 路由校验阶段。校验失败交给 Nestify 过滤器。内置管道优先使用路由级或应用当前的 `validatorCompiler`；两者都不可用时，使用支持 Fastify 共享 schema 的独立默认 JSON Schema 编译器。独立编译器不会继承 Fastify 的自定义 Ajv 配置；如需确保使用自定义配置，请显式设置 `validatorCompiler`。编译器和校验器按应用隔离。
+Nestify 路由的请求校验由管道执行，发生在守卫和拦截器进入阶段之后，而不是 Fastify 路由校验阶段。校验失败交给 Nestify 过滤器。内置管道使用应用当前的 `validatorCompiler`；不可用时，使用支持 Fastify 共享 schema 的独立默认 JSON Schema 编译器。独立编译器不会继承 Fastify 的自定义 Ajv 配置；如需确保使用自定义配置，请调用 `fastify.setValidatorCompiler`。编译器和校验器按应用隔离。
 
-请求 schema 必须由对应的内置管道负责：使用 `@Body`、`@Params`、`@Query`，或在 `@UsePipes` 中使用 `PipeBody`、`PipeParams`、`PipeQuery`。`@Opt({ schema })` 中的请求 schema，以及管道 schema 中不属于该管道的请求部分（包括 headers），会在注册时明确报错，不会被静默忽略。自定义校验请自行实现管道并处理请求数据。响应 schema 仍可用于序列化。Nestify 路由忽略 `attachValidation`；普通 Fastify 路由不受影响。
+请求 schema 必须由对应的内置管道负责：使用 `@Body`、`@Params`、`@Query`，或在 `@UsePipes` 中使用 `PipeBody`、`PipeParams`、`PipeQuery`。管道 schema 中不属于该管道的请求部分（包括 headers）会在注册时明确报错，不会被静默忽略。自定义校验请自行实现管道并处理请求数据。响应 schema 仍可用于序列化。
 
 ```typescript
 @Pipe()
