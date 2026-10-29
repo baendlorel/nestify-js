@@ -184,6 +184,10 @@ NestJS 对照：允许同一 controller 声明在多个模块中（`RoutesResolv
 
 ✅ 34. 彻底删除 `@ApiSchema` 与 `@Opt`
 
+TODO @Opt带来了许多能力下降，还有插件之类的，要看看到底如何兼容比较好
+反正肯定不能导致schema混乱。
+copilot: 真正会踩到的只有两处：bodyLimit 和 config（插件集成）。其余大多数本来就该由框架的 guard / interceptor / filter 接管，Fastify 的 route hooks 留着的意义不大。
+
 35. `startCronJob` / `stopCronJob` 在 uid 重复时只作用于第一个任务
 位置：packages/core/src/schedule/cron.ts:91、packages/core/src/schedule/cron.ts:100
 现状：`findJob(uid)` 使用 `Array.find`，重复 `uid` 时其余任务不受控。
