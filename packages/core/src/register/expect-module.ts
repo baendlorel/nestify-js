@@ -15,6 +15,7 @@ import {
   expectProviderOptions,
   expectRecord,
   expectString,
+  expectOrObject,
   expect,
 } from '@core/asserts/index.js';
 import { metaGetController, metaGetInject, metaGetModule, metaGetProvider, metaGetRoute } from '@core/register/meta.js';
@@ -105,6 +106,12 @@ export function expectController(target: unknown) {
       const basic = v[sym.route.base];
       expectKey(basic.field, `${target.name}: field of this route config should be a string/symbol`);
       expectArray(basic.route, 'Route should be a string array', pred);
+      const bodyLimit = v[sym.route.bodyLimit];
+      expect(
+        bodyLimit === undefined || (typeof bodyLimit === 'number' && bodyLimit > 0),
+        `${target.name}: route bodyLimit should be a positive number`,
+      );
+      expectOrObject(v[sym.route.description], `${target.name}: route description should be an object`);
     },
     `${target.name}: should have a record of route metadata`,
   );

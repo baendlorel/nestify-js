@@ -5,7 +5,7 @@ import { NestifyError } from './error.js';
 import { _entries, _isArray, _isConstructable } from '@nestify-js/shared';
 
 // # Basic
-
+// TODO 改为标准throw NestifyError
 export const expect: (target: any, msg: string) => asserts target = (target, msg) => {
   if (!target) {
     _throw(msg);

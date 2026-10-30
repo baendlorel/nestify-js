@@ -53,6 +53,17 @@ export namespace sym {
     export const base = Symbol('base');
 
     /**
+     * Stores the request body size limit of one route, set by `@BodyLimit(bytes)`
+     */
+    export const bodyLimit = Symbol('bodyLimit');
+
+    /**
+     * Stores OpenAPI information of one route(`summary` / `description` / `tags`),
+     * set by `@Description({ ... })`
+     */
+    export const description = Symbol('description');
+
+    /**
      * Stores property paths of the handler argument `request: FastifyRequest`
      * - if the handler is decorated by `@Args('body.name','body.age')`, then the handler will be called as `handler(request.body.name, request.body.age, reply)`
      * - `reply` will always be the last argument

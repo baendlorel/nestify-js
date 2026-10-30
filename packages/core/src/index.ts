@@ -1,5 +1,7 @@
 // router decorators
 export { Delete, Get, Patch, Post, Put, HttpMethod } from './decorators/router/http-methods.js';
+export { BodyLimit } from './decorators/router/body-limit.js';
+export { Description } from './decorators/router/description.js';
 export { Controller } from './decorators/router/controller.js';
 
 export { Inject } from './decorators/inject.js';
@@ -46,7 +48,7 @@ export type {
   PipeOptions,
 } from './types/middleware.js';
 
-export type { NestifyOptions } from '@core/types/index.js';
+export type { NestifyOptions, RouteDescription } from '@core/types/index.js';
 
 export type { FastifyRequest as NestifyRequest, FastifyReply as NestifyReply } from 'fastify';
 
@@ -87,5 +89,5 @@ export { BasicTransformer, basicTransformer } from './pipes/basic-transformer.js
 export { Cron, CronExpressions } from './schedule/cron.js';
 
 // Rate limiting
-export { Throttle, ThrottleGuard } from './decorators/misc/throttle.js';
-export type { ThrottleOptions, ThrottleInput } from './decorators/misc/throttle.js';
+export { Throttle, ThrottleGuard } from './decorators/router/throttle.js';
+export type { ThrottleOptions, ThrottleInput } from './decorators/router/throttle.js';

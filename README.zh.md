@@ -107,13 +107,17 @@ class UserController {
 
 - 请求 schema 写在内置管道上：`@Body({ schema })`、`@Params({ schema })`、`@Query({ schema })`，
   或 `@UsePipes({ pipe, schema })`。
-- 第一个带 `schema` 的管道会被转发到 Fastify 路由，所以 Swagger 与响应序列化照常工作。
+- `@BodyLimit(bytes)` 设置**单个路由**的请求体大小上限（不写则用服务器级 `bodyLimit`）。
+- `@Description({ summary, description, tags })` 给路由 schema 补充 OpenAPI 信息。
+- 第一个带 `schema` 的管道会连同描述一起转发到 Fastify 路由，所以 Swagger 与响应序列化照常工作。
 
 ```typescript
 @Controller('/files')
 class FileController {
   @Post('/upload')
-  @Body({ type: 'object', required: ['name'] })   // ← 校验 + 路由 schema
+  @BodyLimit(10 * 1024 * 1024)                     // ← 这个路由允许 10MB
+  @Description({ summary: '上传文件', tags: ['files'] })
+  @Body({ type: 'object', required: ['name'] })     // ← 校验 + 路由 schema
   uploadFile(body: { name: string }) {
     return { uploaded: true };
   }

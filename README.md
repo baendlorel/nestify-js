@@ -112,14 +112,18 @@ options.
 
 - Request schemas live on the built-in pipes: `@Body({ schema })`, `@Params({ schema })`,
   `@Query({ schema })`, or `@UsePipes({ pipe, schema })`.
-- The schema of the first pipe carrying a `schema` is forwarded to the Fastify route, so Swagger and
-  response serialization keep working.
+- `@BodyLimit(bytes)` sets the request body size limit of **one route**(defaults to the server `bodyLimit`).
+- `@Description({ summary, description, tags })` adds OpenAPI information to the route schema.
+- The schema of the first pipe carrying a `schema` is forwarded to the Fastify route together with the
+  description, so Swagger and response serialization keep working.
 
 ```typescript
 @Controller('/files')
 class FileController {
   @Post('/upload')
-  @Body({ type: 'object', required: ['name'] })   // ← validation + route schema
+  @BodyLimit(10 * 1024 * 1024)                     // ← this route accepts 10MB
+  @Description({ summary: 'Upload a file', tags: ['files'] })
+  @Body({ type: 'object', required: ['name'] })     // ← validation + route schema
   uploadFile(body: { name: string }) {
     return { uploaded: true };
   }

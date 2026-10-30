@@ -174,19 +174,13 @@ NestJS 对照：允许同一 controller 声明在多个模块中（`RoutesResolv
 低 / 设计限制
 ==
 
-32. provider 实例是应用级而非模块级，同 token 的重复声明被静默忽略
-位置：packages/core/src/register/lazy-injector.ts:103、packages/core/src/register/module.ts:64
-现状：两个模块都声明 `{ provide: 'shared', useValue: ... }` 时只有先注册的生效，后一个被静默丢弃（NestJS 中 provider 按模块隔离，不会冲突）。
-影响：跨模块复用同一 token 会拿到非预期实例；写错配置也不会报错。
-说明：改为模块级作用域需要每个模块独立 injector，属架构调整，未在本轮改动。
+ℹ️ 忽略：32. provider 实例是应用级而非模块级，同 token 的重复声明被静默忽略
+
 
 ✅ 33. 无所谓。字符串 / symbol 型 provider 无法被 exports
 
 ✅ 34. 彻底删除 `@ApiSchema` 与 `@Opt`
-
-TODO @Opt带来了许多能力下降，还有插件之类的，要看看到底如何兼容比较好
-反正肯定不能导致schema混乱。
-copilot: 真正会踩到的只有两处：bodyLimit 和 config（插件集成）。其余大多数本来就该由框架的 guard / interceptor / filter 接管，Fastify 的 route hooks 留着的意义不大。
+相应地增加了@bodilimit和@description
 
 35. `startCronJob` / `stopCronJob` 在 uid 重复时只作用于第一个任务
 位置：packages/core/src/schedule/cron.ts:91、packages/core/src/schedule/cron.ts:100
@@ -196,7 +190,7 @@ copilot: 真正会踩到的只有两处：bodyLimit 和 config（插件集成）
 
 验证记录
 ========
-- pnpm exec vitest run packages/core/tests：19 个文件、149 项通过（删除 `api-schema.test.ts` 5 项 + 4 项依赖 `@Opt` 的用例）。
+- pnpm exec vitest run packages/core/tests：20 个文件、155 项通过（新增 `route-metadata.test.ts`：`@BodyLimit` / `@Description` 共 6 项）。
 - pnpm -C packages/core run check（tsc --noEmit）：通过。
 - 第一轮 23 项逐条复核：实现均在位；第 11 项仍为有意设计（factory 按声明顺序取依赖）。
 - 新增回归用例：http-method（方法名校验、尾斜杠强制等价）、provider-values（别名声明顺序 / 别名越界）、multipart-integration（文件数量超限 413）、filter-integration（未注册过滤器、响应已发送）、jwt（空密钥、非对象载荷）。

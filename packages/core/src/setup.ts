@@ -6,7 +6,7 @@ import { PipeIp } from './pipes/ip.pipe.js';
 import { PipeQuery } from './pipes/query.pipe.js';
 import { PipeRaw } from './pipes/raw.pipe.js';
 import { JwtGuard } from './auth/jwt.guard.js';
-import { ThrottleGuard } from './decorators/misc/throttle.js';
+import { ThrottleGuard } from './decorators/router/throttle.js';
 
 /**
  * Built-in middlewares that are prepended to `registerGlobalMiddlewares`

@@ -120,19 +120,25 @@ export function registerController(app: NestifyInstance, controller: Constructor
     assertPipeSchemas(app, pipes, url);
     const pipe = createPipe(app, pipes);
 
-    // FIXED 路由 schema 只来自管道（用于响应序列化与文档），请求校验在管道中执行。
-    const schema = metaGetFirstMethodPipe(controller, field)?.schema;
+    const firstMethodPipe = metaGetFirstMethodPipe(controller, field);
+    const firstMethodPipeSchema = firstMethodPipe?.schema;
+    // FIXED 路由描述（summary / description / tags）与管道 schema 合并，供 Swagger 读取。
+    const description = routeConfig[sym.route.description];
+    const schema = firstMethodPipeSchema || description ? { ...firstMethodPipeSchema, ...description } : undefined;
 
     // Pass the original method (with correct name) and instance for 'this' binding
     const handler = createHandler(controller, origin, { interceptor, guard, filter, pipe });
 
     console.log(`Registered - ${url} (${method.toUpperCase()})`);
 
+    const bodyLimit = routeConfig[sym.route.bodyLimit];
     app.route({
       schema,
       method,
       url,
       handler,
+      // FIXED `@BodyLimit()` 是唯一透传给 Fastify 的路由选项，用于限制单个路由的请求体大小。
+      ...(bodyLimit === undefined ? {} : { bodyLimit }),
       // FIXED 只对 Nestify 路由跳过 Fastify 请求校验，实际校验在管道执行。
       validatorCompiler: () => () => true,
     });
