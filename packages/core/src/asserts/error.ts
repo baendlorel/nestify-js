@@ -4,7 +4,3 @@ export class NestifyError extends Error {
     this.name = 'NestifyError';
   }
 }
-
-declare global {
-  function _throw(message: string): never;
-}

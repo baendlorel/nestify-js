@@ -1,3 +1,4 @@
+import { NestifyError } from '@core/asserts/error.js';
 import type {
   InjectArg,
   InjectToken,
@@ -56,7 +57,9 @@ namespace ph {
       return useExisting(opts.provide, opts.useExisting);
     }
 
-    _throw(`ProviderOptions must have one of useClass/useValue/useFactory/useExisting, got: ${optsStr}`);
+    throw new NestifyError(
+      `ProviderOptions must have one of useClass/useValue/useFactory/useExisting, got: ${optsStr}`,
+    );
   }
 
   export function getToken(providerOptions: ProviderOptions): InjectToken {
@@ -100,7 +103,7 @@ namespace ph {
       return arg();
     }
 
-    _throw('Cannot get inject token from argument: ' + String(arg));
+    throw new NestifyError('Cannot get inject token from argument: ' + String(arg));
   }
 
   export function getInjectTokenName(arg: InjectArg): string {

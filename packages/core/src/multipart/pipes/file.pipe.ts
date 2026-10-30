@@ -1,8 +1,8 @@
+import { NestifyError } from '@core/asserts/error.js';
 import type { NestifyPipeLike } from '@core/types/middleware.js';
 import type { FileUploadMeta, MultipartFile } from '@core/types/multipart.js';
 
 import { sym } from '@nestify-js/shared';
-import { NestifyError } from '@core/asserts/error.js';
 import { BadRequestException, PayloadTooLargeException } from '@core/exceptions/index.js';
 import { ExecutionContext } from '@core/common/execution-context.js';
 import { metaGet } from '@core/register/meta.js';
@@ -67,11 +67,11 @@ class PipeFile implements NestifyPipeLike {
         const file = await request.file(partOptions);
 
         if (!file) {
-          _throw(`No file uploaded${fieldName ? ` for field "${fieldName}"` : ''}`);
+          throw new NestifyError(`No file uploaded${fieldName ? ` for field "${fieldName}"` : ''}`);
         }
 
         if (fieldName && file.fieldname !== fieldName) {
-          _throw(`Expected file field "${fieldName}" but got "${file.fieldname}"`);
+          throw new NestifyError(`Expected file field "${fieldName}" but got "${file.fieldname}"`);
         }
 
         const uploadedFile = new UploadedFile(file);

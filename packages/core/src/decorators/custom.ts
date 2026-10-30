@@ -1,3 +1,4 @@
+import { NestifyError } from '@core/asserts/error.js';
 import type { AnyFunction, Constructor, SSKey } from '@core/types/primitives.js';
 import { sym } from '@nestify-js/shared';
 import { expectDecoratorContext } from '@core/asserts/index.js';
@@ -20,7 +21,7 @@ export function createDecorator<T = unknown>(key: SSKey) {
       } else if (context.kind === 'method') {
         metaSet<T>(context, [sym.custom.root, sym.custom.method, context.name, key], metadata);
       } else {
-        _throw(
+        throw new NestifyError(
           `Invalid decorator context for custom decorator with key "${String(key)}", must be class or method, got: ${context.kind}`,
         );
       }

@@ -8,62 +8,62 @@ import { _entries, _isArray, _isConstructable } from '@nestify-js/shared';
 // TODO 改为标准throw NestifyError
 export const expect: (target: any, msg: string) => asserts target = (target, msg) => {
   if (!target) {
-    _throw(msg);
+    throw new NestifyError(msg);
   }
 };
 
 export const expectOrString: (o: any, msg: string) => asserts o is string | undefined = (o, msg) => {
   if (o !== undefined && typeof o !== 'string') {
-    _throw(msg);
+    throw new NestifyError(msg);
   }
 };
 
 export const expectString: (o: any, msg: string) => asserts o is string = (o, msg) => {
   if (typeof o !== 'string') {
-    _throw(msg);
+    throw new NestifyError(msg);
   }
 };
 
 export const expectOrObject: (o: any, msg: string) => asserts o is object | undefined = (o, msg) => {
   if (o !== undefined && (typeof o !== 'object' || o === null)) {
-    _throw(msg);
+    throw new NestifyError(msg);
   }
 };
 
 export const expectObject: <T = object>(o: any, msg: string) => asserts o is T = (o, msg) => {
   if (typeof o !== 'object' || o === null) {
-    _throw(msg);
+    throw new NestifyError(msg);
   }
 };
 
 export const expectKey: (o: any, msg: string) => asserts o is InjectToken = (o, msg) => {
   if (typeof o !== 'string' && typeof o !== 'symbol' && !_isConstructable(o)) {
-    _throw(msg);
+    throw new NestifyError(msg);
   }
 };
 
 export const expectClass: (o: any, msg: string) => asserts o is Constructor = (o, msg) => {
   if (typeof o !== 'function') {
-    _throw(msg);
+    throw new NestifyError(msg);
   }
 
   try {
     const temp = new Proxy(o, { construct: () => ({}) });
     new temp();
   } catch {
-    _throw(msg);
+    throw new NestifyError(msg);
   }
 };
 
 export const expectBoolean: (o: any, msg: string) => asserts o is boolean = (o, msg) => {
   if (o !== true && o !== false) {
-    _throw(msg);
+    throw new NestifyError(msg);
   }
 };
 
 export const expectFunction: (o: any, msg: string) => asserts o is AnyFunction = (o, msg) => {
   if (typeof o !== 'function') {
-    _throw(msg);
+    throw new NestifyError(msg);
   }
 };
 

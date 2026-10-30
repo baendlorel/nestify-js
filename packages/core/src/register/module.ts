@@ -1,3 +1,4 @@
+import { NestifyError } from '@core/asserts/error.js';
 import type { NestifyInstance } from '@core/types/instance.js';
 import type {
   NestifyOptions,
@@ -36,7 +37,7 @@ export function registerModule(app: NestifyInstance, opts: NestifyOptions) {
         // if allowed, return directly since it is definitely registered before
         return;
       }
-      _throw(`Circular dependency detected: ${chain}`);
+      throw new NestifyError(`Circular dependency detected: ${chain}`);
     } else {
       moduleStack.push(moduleClass);
     }

@@ -1,3 +1,4 @@
+import { NestifyError } from './error.js';
 import type { InjectArg } from '@core/types/injection.js';
 
 import { inspect } from 'node:util';
@@ -11,7 +12,7 @@ import { isInjectToken, isInjectArg, isProviderOptions } from './whether.js';
 
 export const expectInjectToken = (o: any, msg: string) => {
   if (!isInjectToken(o)) {
-    _throw(msg);
+    throw new NestifyError(msg);
   }
 };
 
@@ -34,24 +35,26 @@ export const expectModulable = (target: Constructor, context: ClassDecoratorCont
 
 export const expectNotDecorated = (context: DecoratorContext, flag: symbol) => {
   if (ReflectDeep.has(context.metadata, [sym.root, flag])) {
-    _throw(`'${String(context.name)}' is already decorated`);
+    throw new NestifyError(`'${String(context.name)}' is already decorated`);
   }
 };
 
 export const expectClassNotDecorated = (cls: Constructor, flag: symbol) => {
   if (ReflectDeep.has(cls, [sym.metadata, sym.root, flag])) {
-    _throw(`'${String(cls.name)}' is already decorated`);
+    throw new NestifyError(`'${String(cls.name)}' is already decorated`);
   }
 };
 
 export const expectInjectArg = (target: InjectArg, msg?: string) => {
   if (!isInjectArg(target)) {
-    _throw(`${msg} Should be an InjectArg(string | symbol | Class | (() => Class)), got: ${inspect(target)}`);
+    throw new NestifyError(
+      `${msg} Should be an InjectArg(string | symbol | Class | (() => Class)), got: ${inspect(target)}`,
+    );
   }
 };
 
 export const expectProviderOptions = (target: unknown) => {
   if (!isProviderOptions(target)) {
-    _throw(`Should be a provider options object, got: ${inspect(target)}`);
+    throw new NestifyError(`Should be a provider options object, got: ${inspect(target)}`);
   }
 };

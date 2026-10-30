@@ -1,3 +1,4 @@
+import { NestifyError } from '@core/asserts/error.js';
 import type { LazyInjectEntry, ProviderOptions, InjectToken, DynamicModule } from '@core/types/injection.js';
 import type { NestifyMiddleware } from '@core/types/middleware.js';
 import type { AnyFunction, Constructor, SSKey } from '@core/types/primitives.js';
@@ -118,7 +119,9 @@ export class Injector {
         const instance = factory(...instances);
         // FIXED 初始化流程是同步的，异步 factory 会让依赖方拿到 Promise；现在显式报错，不再静默注入错误类型。
         if (isThenable(instance)) {
-          _throw(`Async factory for '${ph.getName(token)}' is not supported, providers must be created synchronously`);
+          throw new NestifyError(
+            `Async factory for '${ph.getName(token)}' is not supported, providers must be created synchronously`,
+          );
         }
         this.instanceMap.set(token, instance);
         return instance;
@@ -164,7 +167,7 @@ export class Injector {
     } while (remaining.length > 0 && reordered);
 
     if (remaining.length > 0) {
-      _throw(`Cannot find existing provider: ${ph.getName(remaining[0].target)}`);
+      throw new NestifyError(`Cannot find existing provider: ${ph.getName(remaining[0].target)}`);
     }
   }
 
@@ -229,7 +232,7 @@ export class Injector {
       const moduleClass = toModuleClass(m);
       if (stack.includes(moduleClass)) {
         const chain = stack.map((s) => s.name).join(' -> ');
-        _throw(`Circular dependency detected: ${chain} -> ${String(moduleClass.name)}`);
+        throw new NestifyError(`Circular dependency detected: ${chain} -> ${String(moduleClass.name)}`);
       }
       stack.push(moduleClass);
       const moduleMetadata = metaGetModule(moduleClass);

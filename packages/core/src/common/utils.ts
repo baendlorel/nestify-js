@@ -1,3 +1,4 @@
+import { NestifyError } from '@core/asserts/error.js';
 import { type Constructor } from '@nestify-js/shared';
 import { DynamicModule } from '@core/types/injection.js';
 import { likeModule } from '@core/asserts/index.js';
@@ -19,7 +20,7 @@ export function splitPath(p: string | undefined): string[] {
   }
 
   if (!PATH_REGEX.test(p)) {
-    _throw(`Path must match ${PATH_REGEX.toString()}. But got: [${p}]`);
+    throw new NestifyError(`Path must match ${PATH_REGEX.toString()}. But got: [${p}]`);
   }
   return p.split('/').filter((s) => s !== '');
 }
