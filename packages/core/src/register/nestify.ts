@@ -11,6 +11,7 @@ import type { NestifyOptions } from '@core/types/injection.js';
 import type { NestifyInstance } from '@core/types/instance.js';
 
 import { apply } from './index.js';
+import { registerOpenApi } from './route/open-api.js';
 
 /**
  * A fastify plugin to be registered before modules are applied.
@@ -27,6 +28,8 @@ export interface NestifyBootOptions extends Partial<Omit<NestifyOptions, 'rootMo
    * Shortcut for `fastify.logger`, identical in effect.
    */
   logger?: FastifyServerOptions['logger'];
+
+  openApi?: Array<{ path: string; format: 'json' | 'yaml' }>;
 
   /**
    * Options passed to the fastify factory (`fastify(options)`)
@@ -73,7 +76,7 @@ export interface NestifyBootOptions extends Partial<Omit<NestifyOptions, 'rootMo
  * ```
  */
 export async function nestify(rootModule: Constructor, opts: NestifyBootOptions = {}): Promise<NestifyInstance> {
-  const { fastify: serverOptions = {}, plugins, listen, logger, ...rest } = opts;
+  const { fastify: serverOptions = {}, plugins, listen, logger, openApi, ...rest } = opts;
 
   // `ignoreTrailingSlash` moved into `routerOptions` in fastify@5.
   // FIXED 尾斜杠一律忽略(NestJS 没有该开关)，不提供入参，也不允许通过 fastify 选项改回 strict。
@@ -90,6 +93,10 @@ export async function nestify(rootModule: Constructor, opts: NestifyBootOptions 
 
   for (const [plugin, options] of plugins ?? []) {
     await app.register(plugin, options);
+  }
+
+  if (openApi) {
+    await registerOpenApi(app, openApi);
   }
 
   await apply(app, { ...rest, rootModule });
